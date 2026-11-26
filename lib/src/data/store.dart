@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../domain/models.dart';
+import '../domain/queue.dart';
 
 /// Where the app keeps its single JSON document.
 abstract interface class Storage {
@@ -82,15 +83,20 @@ class AppStore extends ChangeNotifier {
     try {
       final json = (jsonDecode(raw) as Map).cast<String, Object?>();
       if (json['version'] != schemaVersion) return;
-      _players = [
+      // Parse everything before keeping any of it, so a bad document never
+      // leaves the store half loaded (and then saved over the good data).
+      final players = [
         for (final p in json['players']! as List<Object?>)
           Player.fromJson((p! as Map).cast<String, Object?>()),
       ];
-      _sessions = [
+      final sessions = [
         for (final s in json['sessions']! as List<Object?>)
           Session.fromJson((s! as Map).cast<String, Object?>()),
       ];
-      _nextId = json['nextId']! as int;
+      final nextId = json['nextId']! as int;
+      _players = players;
+      _sessions = sessions;
+      _nextId = nextId;
     } on Object catch (e) {
       debugPrint('gelanggang: ignoring unreadable saved data ($e)');
       return;
@@ -184,6 +190,12 @@ class AppStore extends ChangeNotifier {
   Future<void> toggleAttendance(int sessionId, int playerId) async {
     final s = session(sessionId)!;
     final present = s.attendance.any((a) => a.playerId == playerId);
+    if (present && s.games.any((g) => g.players.contains(playerId))) {
+      throw InputError(
+        '${names[playerId] ?? 'This player'} has games in this session; '
+        'remove those games first',
+      );
+    }
     await updateSession(
       s.copyWith(
         attendance: present
@@ -209,6 +221,85 @@ class AppStore extends ChangeNotifier {
         ],
       ),
     );
+  }
+
+  /// Puts [teamA] against [teamB] on [court]. All four must be present, not
+  /// sitting out and not already on court, and the court must be free.
+  Future<Game> startGame(
+    int sessionId, {
+    required int court,
+    required List<int> teamA,
+    required List<int> teamB,
+  }) async {
+    final s = session(sessionId)!;
+    final players = [...teamA, ...teamB];
+    if (teamA.length != 2 || teamB.length != 2 || players.toSet().length != 4) {
+      throw const InputError('A game needs four different players');
+    }
+    if (!freeCourts(s).contains(court)) {
+      throw InputError('Court $court is not free');
+    }
+    final waiting = waitingOrder(s).toSet();
+    for (final p in players) {
+      if (!waiting.contains(p)) {
+        throw InputError('${names[p] ?? 'A player'} is not free to play');
+      }
+    }
+    final game = Game(
+      id: s.games.fold<int>(0, (m, g) => g.id > m ? g.id : m) + 1,
+      court: court,
+      teamA: List.unmodifiable(teamA),
+      teamB: List.unmodifiable(teamB),
+    );
+    await updateSession(s.copyWith(games: [...s.games, game]));
+    return game;
+  }
+
+  /// Takes a game off court, with an optional score (both or neither,
+  /// 0-99, no draws).
+  Future<void> finishGame(
+    int sessionId,
+    int gameId, {
+    int? scoreA,
+    int? scoreB,
+  }) async {
+    final s = session(sessionId)!;
+    final game = s.games.firstWhere((g) => g.id == gameId);
+    if (game.finished) throw const InputError('This game is already finished');
+    if ((scoreA == null) != (scoreB == null)) {
+      throw const InputError('Enter both scores or neither');
+    }
+    if (scoreA != null && scoreB != null) {
+      if (scoreA < 0 || scoreA > 99 || scoreB < 0 || scoreB > 99) {
+        throw const InputError('Scores must be between 0 and 99');
+      }
+      if (scoreA == scoreB) {
+        throw const InputError('A badminton game cannot end in a draw');
+      }
+    }
+    final seq = s.games.fold<int>(
+      0,
+      (m, g) => (g.finishedSeq ?? 0) > m ? g.finishedSeq! : m,
+    );
+    final done = game.finish(seq: seq + 1, scoreA: scoreA, scoreB: scoreB);
+    await updateSession(
+      s.copyWith(games: [for (final g in s.games) g.id == gameId ? done : g]),
+    );
+  }
+
+  /// Removes a game started by mistake, or a wrong entry in the log.
+  Future<void> removeGame(int sessionId, int gameId) async {
+    final s = session(sessionId)!;
+    await updateSession(
+      s.copyWith(games: s.games.where((g) => g.id != gameId).toList()),
+    );
+  }
+
+  /// Sitting out keeps a player in the cost split but out of the queue.
+  Future<void> setResting(int sessionId, int playerId, bool resting) async {
+    final s = session(sessionId)!;
+    final a = s.attendance.firstWhere((a) => a.playerId == playerId);
+    await updateAttendance(sessionId, a.copyWith(resting: resting));
   }
 
   /// "2026-11-26" yes; "2026-13-01" or "2026-02-30" no (DateTime.parse
@@ -252,6 +343,17 @@ class AppStore extends ChangeNotifier {
         throw const InputError(
           'Arrival and leaving times must be within the session',
         );
+      }
+    }
+    final present = {for (final a in s.attendance) a.playerId};
+    for (final g in s.games) {
+      if (!g.finished && g.court > s.courts) {
+        throw InputError(
+          'Court ${g.court} still has a game on; finish it first',
+        );
+      }
+      if (!g.players.every(present.contains)) {
+        throw const InputError('Everyone in a game must be at the session');
       }
     }
   }
@@ -300,5 +402,19 @@ class AppStore extends ChangeNotifier {
         ],
       ),
     );
+    // A few games so the court queue has something to show: two finished,
+    // one on court 1, four players waiting.
+    for (final (court, score) in [(1, (21, 17)), (2, (19, 21))]) {
+      final next = suggestNext(session(s.id)!)!;
+      final g = await startGame(
+        s.id,
+        court: court,
+        teamA: next.teamA,
+        teamB: next.teamB,
+      );
+      await finishGame(s.id, g.id, scoreA: score.$1, scoreB: score.$2);
+    }
+    final next = suggestNext(session(s.id)!)!;
+    await startGame(s.id, court: 1, teamA: next.teamA, teamB: next.teamB);
   }
 }

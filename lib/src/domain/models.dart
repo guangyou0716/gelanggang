@@ -32,6 +32,7 @@ class Attendance {
     required this.arriveMinute,
     required this.leaveMinute,
     this.paid = false,
+    this.resting = false,
   });
 
   final int playerId;
@@ -39,21 +40,31 @@ class Attendance {
   final int leaveMinute;
   final bool paid;
 
+  /// Sitting out: still counted for the cost split, but not suggested for the
+  /// next game.
+  final bool resting;
+
   int get minutes => leaveMinute - arriveMinute;
 
-  Attendance copyWith({int? arriveMinute, int? leaveMinute, bool? paid}) =>
-      Attendance(
-        playerId: playerId,
-        arriveMinute: arriveMinute ?? this.arriveMinute,
-        leaveMinute: leaveMinute ?? this.leaveMinute,
-        paid: paid ?? this.paid,
-      );
+  Attendance copyWith({
+    int? arriveMinute,
+    int? leaveMinute,
+    bool? paid,
+    bool? resting,
+  }) => Attendance(
+    playerId: playerId,
+    arriveMinute: arriveMinute ?? this.arriveMinute,
+    leaveMinute: leaveMinute ?? this.leaveMinute,
+    paid: paid ?? this.paid,
+    resting: resting ?? this.resting,
+  );
 
   Map<String, Object?> toJson() => {
     'playerId': playerId,
     'arrive': arriveMinute,
     'leave': leaveMinute,
     'paid': paid,
+    if (resting) 'resting': true,
   };
 
   static Attendance fromJson(Map<String, Object?> json) => Attendance(
@@ -61,6 +72,7 @@ class Attendance {
     arriveMinute: json['arrive']! as int,
     leaveMinute: json['leave']! as int,
     paid: json['paid'] as bool? ?? false,
+    resting: json['resting'] as bool? ?? false,
   );
 }
 
@@ -78,6 +90,7 @@ class Session {
     required this.shuttlePriceSen,
     this.splitMode = SplitMode.equal,
     this.attendance = const [],
+    this.games = const [],
   });
 
   final int id;
@@ -99,6 +112,9 @@ class Session {
   final SplitMode splitMode;
   final List<Attendance> attendance;
 
+  /// Doubles games in the order they were started.
+  final List<Game> games;
+
   int get durationMinutes => endMinute - startMinute;
 
   Session copyWith({
@@ -112,6 +128,7 @@ class Session {
     int? shuttlePriceSen,
     SplitMode? splitMode,
     List<Attendance>? attendance,
+    List<Game>? games,
   }) => Session(
     id: id,
     date: date ?? this.date,
@@ -124,6 +141,7 @@ class Session {
     shuttlePriceSen: shuttlePriceSen ?? this.shuttlePriceSen,
     splitMode: splitMode ?? this.splitMode,
     attendance: attendance ?? this.attendance,
+    games: games ?? this.games,
   );
 
   Map<String, Object?> toJson() => {
@@ -138,6 +156,7 @@ class Session {
     'shuttlePriceSen': shuttlePriceSen,
     'splitMode': splitMode.name,
     'attendance': [for (final a in attendance) a.toJson()],
+    'games': [for (final g in games) g.toJson()],
   };
 
   static Session fromJson(Map<String, Object?> json) => Session(
@@ -158,5 +177,80 @@ class Session {
       for (final a in json['attendance']! as List<Object?>)
         Attendance.fromJson((a! as Map).cast<String, Object?>()),
     ],
+    // Saved before the court queue existed: no games.
+    games: [
+      for (final g in json['games'] as List<Object?>? ?? const [])
+        Game.fromJson((g! as Map).cast<String, Object?>()),
+    ],
   );
+}
+
+/// A doubles game on one court: [teamA] against [teamB], two players each.
+class Game {
+  const Game({
+    required this.id,
+    required this.court,
+    required this.teamA,
+    required this.teamB,
+    this.finishedSeq,
+    this.scoreA,
+    this.scoreB,
+  });
+
+  /// Unique within its session.
+  final int id;
+
+  /// 1 to the session's number of courts.
+  final int court;
+  final List<int> teamA;
+  final List<int> teamB;
+
+  /// Null while the game is on court. When it finishes it gets the next
+  /// number in the session (1, 2, 3...), which tells the queue how long ago
+  /// each player last came off court.
+  final int? finishedSeq;
+
+  /// Optional final score; both or neither.
+  final int? scoreA;
+  final int? scoreB;
+
+  bool get finished => finishedSeq != null;
+  List<int> get players => [...teamA, ...teamB];
+
+  Game finish({required int seq, int? scoreA, int? scoreB}) => Game(
+    id: id,
+    court: court,
+    teamA: teamA,
+    teamB: teamB,
+    finishedSeq: seq,
+    scoreA: scoreA,
+    scoreB: scoreB,
+  );
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'court': court,
+    'a': teamA,
+    'b': teamB,
+    if (finishedSeq != null) 'finished': finishedSeq,
+    if (scoreA != null) 'scoreA': scoreA,
+    if (scoreB != null) 'scoreB': scoreB,
+  };
+
+  static Game fromJson(Map<String, Object?> json) {
+    final teamA = List<int>.unmodifiable(json['a']! as List<Object?>);
+    final teamB = List<int>.unmodifiable(json['b']! as List<Object?>);
+    if (teamA.length != 2 || teamB.length != 2) {
+      throw const FormatException('A game has two players per team');
+    }
+    return Game(
+      id: json['id']! as int,
+      court: json['court']! as int,
+      teamA: teamA,
+      teamB: teamB,
+      finishedSeq: json['finished'] as int?,
+      scoreA: json['scoreA'] as int?,
+      scoreB: json['scoreB'] as int?,
+    );
+  }
 }
