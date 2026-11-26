@@ -139,6 +139,29 @@ class AppStore extends ChangeNotifier {
   bool canRemovePlayer(int id) =>
       !_sessions.any((s) => s.attendance.any((a) => a.playerId == id));
 
+  /// Marks a player as a guest (or a regular) for their next check-ins.
+  /// Sessions already recorded keep what they were.
+  Future<void> setPlayerGuest(int id, bool guest) async {
+    _players = [
+      for (final p in _players) p.id == id ? p.copyWith(guest: guest) : p,
+    ];
+    await _save();
+  }
+
+  /// Marks every unpaid share of [playerId], in every session, as paid.
+  Future<void> settleAll(int playerId) async {
+    _sessions = [
+      for (final s in _sessions)
+        s.copyWith(
+          attendance: [
+            for (final a in s.attendance)
+              a.playerId == playerId ? a.copyWith(paid: true) : a,
+          ],
+        ),
+    ];
+    await _save();
+  }
+
   Future<void> removePlayer(int id) async {
     if (!canRemovePlayer(id)) {
       throw const InputError('This player is in a past session');
@@ -156,6 +179,7 @@ class AppStore extends ChangeNotifier {
     required int courtRateSen,
     required int shuttles,
     required int shuttlePriceSen,
+    int guestFeeSen = 0,
   }) async {
     final s = Session(
       id: _nextId++,
@@ -167,6 +191,7 @@ class AppStore extends ChangeNotifier {
       courtRateSen: courtRateSen,
       shuttles: shuttles,
       shuttlePriceSen: shuttlePriceSen,
+      guestFeeSen: guestFeeSen,
     );
     _check(s);
     _sessions = [..._sessions, s];
@@ -186,7 +211,8 @@ class AppStore extends ChangeNotifier {
   }
 
   /// Adds or removes [playerId] from session [sessionId]; a new arrival is
-  /// there for the whole session until changed.
+  /// there for the whole session until changed, and is a guest if the roster
+  /// says so.
   Future<void> toggleAttendance(int sessionId, int playerId) async {
     final s = session(sessionId)!;
     final present = s.attendance.any((a) => a.playerId == playerId);
@@ -206,6 +232,7 @@ class AppStore extends ChangeNotifier {
                   playerId: playerId,
                   arriveMinute: 0,
                   leaveMinute: s.durationMinutes,
+                  guest: _players.any((p) => p.id == playerId && p.guest),
                 ),
               ],
       ),
@@ -295,6 +322,17 @@ class AppStore extends ChangeNotifier {
     );
   }
 
+  /// Whether [playerId] counts as a guest at this one session.
+  Future<void> setAttendanceGuest(
+    int sessionId,
+    int playerId,
+    bool guest,
+  ) async {
+    final s = session(sessionId)!;
+    final a = s.attendance.firstWhere((a) => a.playerId == playerId);
+    await updateAttendance(sessionId, a.copyWith(guest: guest));
+  }
+
   /// Sitting out keeps a player in the cost split but out of the queue.
   Future<void> setResting(int sessionId, int playerId, bool resting) async {
     final s = session(sessionId)!;
@@ -311,6 +349,17 @@ class AppStore extends ChangeNotifier {
     final back =
         '${parsed.year.toString().padLeft(4, '0')}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')}';
     return back == date;
+  }
+
+  /// "2026-11-19" for ("2026-11-26", 7).
+  static String _daysBefore(String date, int days) {
+    final d = DateTime.utc(
+      int.parse(date.substring(0, 4)),
+      int.parse(date.substring(5, 7)),
+      int.parse(date.substring(8, 10)) - days,
+    );
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${d.year.toString().padLeft(4, '0')}-${two(d.month)}-${two(d.day)}';
   }
 
   static void _check(Session s) {
@@ -335,6 +384,9 @@ class AppStore extends ChangeNotifier {
     }
     if (s.shuttles < 0 || s.shuttles > 500) {
       throw const InputError('Shuttles must be between 0 and 500');
+    }
+    if (s.guestFeeSen < 0 || s.guestFeeSen > 10000) {
+      throw const InputError('Guest fee must be between RM0 and RM100');
     }
     for (final a in s.attendance) {
       if (a.arriveMinute < 0 ||
@@ -373,6 +425,35 @@ class AppStore extends ChangeNotifier {
     ]) {
       await addPlayer(name);
     }
+    final guest = _players.firstWhere((p) => p.name == 'Iskandar');
+    await setPlayerGuest(guest.id, true);
+
+    // Last week: one court, split equally, two players have not paid yet.
+    final lastWeek = await createSession(
+      date: _daysBefore(today, 7),
+      venue: 'Demo Community Hall (synthetic)',
+      startMinute: 20 * 60,
+      endMinute: 22 * 60,
+      courts: 1,
+      courtRateSen: 2000,
+      shuttles: 4,
+      shuttlePriceSen: 450,
+    );
+    for (final p in _players.where((p) => !p.guest).take(6)) {
+      await toggleAttendance(lastWeek.id, p.id);
+    }
+    final owing = {'Bee Ling', 'Farah'};
+    final past = session(lastWeek.id)!;
+    await updateSession(
+      past.copyWith(
+        attendance: [
+          for (final a in past.attendance)
+            a.copyWith(paid: !owing.contains(names[a.playerId])),
+        ],
+      ),
+    );
+
+    // Today: courts by time, shuttles by games, a guest on a flat fee.
     final s = await createSession(
       date: today,
       venue: 'Demo Sports Hall (synthetic)',
@@ -382,6 +463,7 @@ class AppStore extends ChangeNotifier {
       courtRateSen: 2000,
       shuttles: 6,
       shuttlePriceSen: 450,
+      guestFeeSen: 1500,
     );
     for (final p in _players) {
       await toggleAttendance(s.id, p.id);
@@ -391,7 +473,8 @@ class AppStore extends ChangeNotifier {
     final current = session(s.id)!;
     await updateSession(
       current.copyWith(
-        splitMode: SplitMode.byMinutes,
+        courtSplit: SplitMode.byMinutes,
+        shuttleSplit: SplitMode.byGames,
         attendance: [
           for (final a in current.attendance)
             a.playerId == late.id

@@ -12,3 +12,12 @@ Future<AppStore> pumpApp(WidgetTester tester) async {
   await tester.pumpWidget(GelanggangApp(store: store));
   return store;
 }
+
+/// Scrolls the screen's list back to the top, then down until [finder] shows.
+Future<void> reveal(WidgetTester tester, Finder finder) async {
+  final list = find.byType(Scrollable).first;
+  await tester.drag(list, const Offset(0, 5000));
+  await tester.pumpAndSettle();
+  await tester.scrollUntilVisible(finder, 150, scrollable: list);
+  await tester.pumpAndSettle();
+}

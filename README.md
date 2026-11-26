@@ -9,22 +9,39 @@ money. It only works out the amounts and writes a message you can paste into Wha
 
 <p>
   <img src="docs/home.png" alt="Session list with the demo session" width="280">
-  <img src="docs/session.png" alt="A session split by time played, one player marked paid" width="280">
+  <img src="docs/session.png" alt="A session: courts split by time, shuttles by games, a guest on a flat fee and amounts still owed from last week" width="280">
   <img src="docs/queue.png" alt="Court queue: one court in play, the next four paired up, waiting list and game log" width="280">
+</p>
+<p>
+  <img src="docs/players.png" alt="Players with sessions, games and what each still owes across sessions" width="280">
+  <img src="docs/player.png" alt="One player's history with a button to mark everything paid" width="280">
 </p>
 
 ## What it does
 
-- **Players**: keep your group's roster (names are trimmed, duplicates refused).
+- **Players**: keep your group's roster (names are trimmed, duplicates refused). Mark someone as a guest and
+  they check in as a guest from then on (sessions already recorded keep what they were).
 - **Sessions**: date, venue, start/end time, number of courts and hourly court rate, shuttles used and price
   per shuttle. Court hire = courts × rate × hours, rounded half up to the sen.
 - **Who came**: tick the players who came; change arrival/leaving times for late arrivals or early leavers.
 - **Fair split**, in integer sen with the largest remainder method, so the shares always add up exactly to
   the total:
-  - *Split equally* among everyone who came, or
-  - *By time played*, in proportion to the minutes each player was at the court.
+  - *Equally* among everyone who came,
+  - *By time*, in proportion to the minutes each player was at the court, or
+  - *By games*, in proportion to the games each player started (handy for shuttles). With no games logged
+    yet it falls back to equal.
+  - The court hire and the shuttles each have their own mode, e.g. courts by time and shuttles by games.
+  - **Guest fee**: give a session a flat guest fee and each guest pays exactly that; the regulars share the
+    rest (the fees go towards the court hire first, then the shuttles). With no guests, no regulars or no fee,
+    everyone shares alike. If the fees would come to more than the whole session, the guests split the total
+    and the regulars pay nothing. A player can be switched between guest and regular for one session.
 - **Settle up**: mark who has paid, see what is left to collect, and copy a ready-made message for the group.
   There are no payment links and no wallet; pay each other however you like.
+- **Balances carried over**: unpaid shares from earlier sessions are shown on each player's row and added to
+  their line in the message ("RM 12.86 + RM 9.66 from earlier sessions = RM 22.52").
+- **History**: the Players screen shows each player's sessions, games and what they owe across all sessions,
+  with a "Copy reminder" message listing everyone who still owes. Open a player for their session history,
+  wins, and a button to mark everything they owe as paid.
 - **Court queue**: a "who plays next" board for doubles. It shows each court (free, or who is on it), suggests
   the next four and pairs them up, keeps a waiting list and logs finished games with an optional score.
   - Whoever came off court longest ago goes first (someone who has not played yet has waited since the
@@ -36,8 +53,7 @@ money. It only works out the amounts and writes a message you can paste into Wha
 - Data is saved on the device (`shared_preferences`, which is local storage on the web). The first launch adds a
   synthetic demo group so you can try it straight away.
 
-Planned next: split by games played, guest fees, balances carried across sessions, BM/中文 translations, and
-JSON backup/restore. See the roadmap below.
+Planned next: BM/中文 translations, an accessibility pass and JSON backup/restore. See the roadmap below.
 
 ## Run it
 
@@ -64,7 +80,13 @@ Built and tested with Flutter 3.50 (Dart 3.14).
   reload, and the pairing never repeats a partnership that could have been avoided.
 - Widget tests drive the real screens: add players, create a session (with form validation), tick
   attendance, mark paid, switch to split by time, edit arrival times, check the message text, and run the
-  court queue (swap a player, start a game, refuse a drawn score, log a result, sit someone out).
+  court queue (swap a player, start a game, refuse a drawn score, log a result, sit someone out), switch a
+  guest to a regular, change the split modes, edit the guest fee, copy the balances reminder and mark a
+  player's sessions paid.
+- The split modes and guest fee have a randomised test (2,000 sessions with random guests, times, games, modes
+  and fees): shares always add up to the total, nobody goes below zero and a guest never pays more than the
+  fee. Saved data from before this version (one split mode, no guests) still loads, and damaged fees or guest
+  flags are ignored without overwriting what is saved.
 - GitHub Actions runs `dart format`, `flutter analyze`, `flutter test --coverage` and `flutter build web` on
   every push and pull request.
 
@@ -72,7 +94,7 @@ Built and tested with Flutter 3.50 (Dart 3.14).
 
 1. ✅ Roster, sessions, attendance, equal / by-time split, settle-up message, local storage, CI.
 2. ✅ Court queue and game log with a fair "next four" suggestion (deterministic, with property tests).
-3. More split modes (by games played, guest fee), balances carried over, history.
+3. ✅ Split by games, separate court/shuttle modes, guest fee, balances carried over, player history.
 4. Bahasa Melayu and 简体中文, accessibility pass, JSON backup/restore, integration tests.
 
 ## Privacy

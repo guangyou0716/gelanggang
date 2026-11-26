@@ -44,6 +44,9 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
       'shuttlePrice': TextEditingController(
         text: s == null ? '' : rm(s.shuttlePriceSen),
       ),
+      'guestFee': TextEditingController(
+        text: s == null ? '0' : rm(s.guestFeeSen),
+      ),
     };
   }
 
@@ -77,6 +80,7 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
     final rate = parseRm(_c['rate']!.text)!;
     final shuttles = int.parse(_c['shuttles']!.text.trim());
     final shuttlePrice = parseRm(_c['shuttlePrice']!.text)!;
+    final guestFee = parseRm(_c['guestFee']!.text)!;
     final existing = _existing;
     late int id;
     final ok = await attempt(context, () async {
@@ -90,6 +94,7 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
           courtRateSen: rate,
           shuttles: shuttles,
           shuttlePriceSen: shuttlePrice,
+          guestFeeSen: guestFee,
         )).id;
       } else {
         // A shorter session cuts arrival/leaving times to fit.
@@ -105,6 +110,7 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
             courtRateSen: rate,
             shuttles: shuttles,
             shuttlePriceSen: shuttlePrice,
+            guestFeeSen: guestFee,
             attendance: [
               for (final a in existing.attendance)
                 a.copyWith(
@@ -215,6 +221,13 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
                   ),
                 ),
               ],
+            ),
+            _field(
+              'guestFee',
+              'Guest fee (RM, 0 = guests share like regulars)',
+              validator: _money,
+              keyboard: const TextInputType.numberWithOptions(decimal: true),
+              hint: 'e.g. 15',
             ),
             const SizedBox(height: 8),
             FilledButton(
