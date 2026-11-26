@@ -76,7 +76,13 @@ class SessionScreen extends StatelessWidget {
         final text = Theme.of(context).textTheme;
         return Scaffold(
           appBar: AppBar(
-            title: Text(t.date(s.date)),
+            // Long dates (ZH/BM, with the weekday) shrink to fit a narrow
+            // phone instead of losing the weekday to an ellipsis.
+            title: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(t.date(s.date)),
+            ),
             actions: [
               IconButton(
                 tooltip: t(K.editSession),
