@@ -132,6 +132,11 @@ enum K {
   // Language picker
   language('Language'),
   languageDevice('Same as this device ({language})'),
+  languageAndAppearance('Language and appearance'),
+  appearance('Appearance'),
+  appearanceDevice('Same as this device'),
+  appearanceLight('Light'),
+  appearanceDark('Dark'),
 
   // Home
   players('Players'),
