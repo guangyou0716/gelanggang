@@ -29,7 +29,7 @@ class PlayerRecord {
   /// Finished games with a score that this player's team won.
   final int wins;
 
-  /// Shares not marked paid, over all sessions.
+  /// Still owed over all sessions (see `dueSen`).
   final int owedSen;
   final int unpaidSessions;
 
@@ -54,7 +54,7 @@ Map<int, PlayerRecord> playerRecords(Iterable<Session> sessions) {
     for (final att in s.attendance) {
       final id = att.playerId;
       final r = records[id] ?? const PlayerRecord();
-      final owed = att.paid ? 0 : shares[id] ?? 0;
+      final owed = dueSen(att, shares[id] ?? 0);
       records[id] = PlayerRecord(
         sessions: r.sessions + 1,
         games: r.games + (played[id] ?? 0),
@@ -77,9 +77,9 @@ Map<int, int> carriedOver(Iterable<Session> sessions, Session current) {
     if (compareSessions(s, current) >= 0) continue;
     final shares = sharesFor(s);
     for (final a in s.attendance) {
-      if (a.paid || !present.contains(a.playerId)) continue;
-      final share = shares[a.playerId] ?? 0;
-      if (share > 0) owed[a.playerId] = (owed[a.playerId] ?? 0) + share;
+      if (!present.contains(a.playerId)) continue;
+      final due = dueSen(a, shares[a.playerId] ?? 0);
+      if (due > 0) owed[a.playerId] = (owed[a.playerId] ?? 0) + due;
     }
   }
   return owed;

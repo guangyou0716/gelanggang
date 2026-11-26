@@ -207,10 +207,7 @@ class SessionScreen extends StatelessWidget {
                     context,
                     () => store.toggleAttendance(s.id, p.id),
                   ),
-                  onPaid: (paid) => store.updateAttendance(
-                    s.id,
-                    present[p.id]!.copyWith(paid: paid),
-                  ),
+                  onPaid: (paid) => store.setPaid(s.id, p.id, paid),
                   onTimes: () => _editTimes(context, s, present[p.id]!, p.name),
                   onGuest: (guest) =>
                       store.setAttendanceGuest(s.id, p.id, guest),
@@ -270,12 +267,15 @@ class _Figure extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: text.labelMedium),
-        Text(value, style: text.titleLarge),
-      ],
+    // Read as one item, "Total RM 107.00", by screen readers.
+    return MergeSemantics(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: text.labelMedium),
+          Text(value, style: text.titleLarge),
+        ],
+      ),
     );
   }
 }
@@ -356,6 +356,38 @@ class _PlayerRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final a = attendance;
+    final share = shareSen ?? 0;
+    final due = a == null ? 0 : dueSen(a, share);
+    final over = a == null ? 0 : overpaidSen(a, share);
+    final paidInFull = a != null && a.paid && due == 0;
+    final error = Theme.of(context).colorScheme.error;
+    // With large text there is no room beside the name, so the share and
+    // its buttons go on a line of their own under it.
+    final stacked = MediaQuery.textScalerOf(context).scale(10) > 13;
+    Widget controls(Attendance a) => Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 8,
+      children: [
+        Text(formatRm(share)),
+        // A part-paid share shows unticked; ticking it records the new
+        // amount in full.
+        FilterChip(
+          label: Text('Paid', semanticsLabel: '$name paid'),
+          selected: paidInFull,
+          onSelected: onPaid,
+        ),
+        PopupMenuButton<bool>(
+          tooltip: 'More for $name',
+          onSelected: onGuest,
+          itemBuilder: (_) => [
+            PopupMenuItem(
+              value: !a.guest,
+              child: Text(a.guest ? 'Count as a regular' : 'Count as a guest'),
+            ),
+          ],
+        ),
+      ],
+    );
     return ListTile(
       leading: Checkbox(
         value: a != null,
@@ -368,13 +400,43 @@ class _PlayerRow extends StatelessWidget {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                InkWell(
+                Semantics(
+                  container: true,
+                  button: true,
                   onTap: onTimes,
-                  child: Text(
-                    '${formatClock(session.startMinute + a.arriveMinute)}-'
-                    '${formatClock(session.startMinute + a.leaveMinute)} · tap to change',
+                  label:
+                      'Change times for $name, '
+                      '${formatClock(session.startMinute + a.arriveMinute)} to '
+                      '${formatClock(session.startMinute + a.leaveMinute)}',
+                  excludeSemantics: true,
+                  child: InkWell(
+                    onTap: onTimes,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 48),
+                      child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        widthFactor: 1,
+                        child: Text(
+                          '${formatClock(session.startMinute + a.arriveMinute)}-'
+                          '${formatClock(session.startMinute + a.leaveMinute)} · tap to change',
+                        ),
+                      ),
+                    ),
                   ),
                 ),
+                if (a.paid && due > 0)
+                  Text(
+                    'Paid ${formatRm(a.paidSen!)}; share went up, '
+                    '${formatRm(due)} more due',
+                    key: Key('due-${a.playerId}'),
+                    style: TextStyle(color: error),
+                  ),
+                if (over > 0)
+                  Text(
+                    'Paid ${formatRm(a.paidSen!)}; share went down, '
+                    '${formatRm(over)} to give back',
+                    key: Key('over-${a.playerId}'),
+                  ),
                 if (a.guest || earlierSen > 0)
                   Text(
                     [
@@ -382,40 +444,12 @@ class _PlayerRow extends StatelessWidget {
                       if (earlierSen > 0)
                         '${formatRm(earlierSen)} owed from earlier',
                     ].join(' · '),
-                    style: TextStyle(
-                      color: earlierSen > 0
-                          ? Theme.of(context).colorScheme.error
-                          : null,
-                    ),
+                    style: TextStyle(color: earlierSen > 0 ? error : null),
                   ),
+                if (stacked) controls(a),
               ],
             ),
-      trailing: a == null
-          ? null
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(formatRm(shareSen ?? 0)),
-                const SizedBox(width: 8),
-                FilterChip(
-                  label: const Text('Paid'),
-                  selected: a.paid,
-                  onSelected: onPaid,
-                ),
-                PopupMenuButton<bool>(
-                  tooltip: 'More for $name',
-                  onSelected: onGuest,
-                  itemBuilder: (_) => [
-                    PopupMenuItem(
-                      value: !a.guest,
-                      child: Text(
-                        a.guest ? 'Count as a regular' : 'Count as a guest',
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+      trailing: a == null || stacked ? null : controls(a),
     );
   }
 }

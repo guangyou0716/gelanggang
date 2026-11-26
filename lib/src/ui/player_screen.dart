@@ -117,24 +117,36 @@ class PlayerScreen extends StatelessWidget {
                       (a) => a.playerId == playerId,
                     );
                     final share = sharesFor(s)[playerId] ?? 0;
+                    final due = dueSen(a, share);
                     final games = gamesPlayed(s)[playerId] ?? 0;
+                    // The amount goes on its own line, not beside the
+                    // title, so neither gets squeezed (long part-paid text,
+                    // large text sizes).
                     return ListTile(
                       title: Text('${s.date} · ${s.venue}'),
-                      subtitle: Text(
-                        '${gamesLabel(games)}${a.guest ? ' · guest' : ''}',
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${gamesLabel(games)}${a.guest ? ' · guest' : ''}',
+                          ),
+                          Text(
+                            share == 0
+                                ? formatRm(0)
+                                : due == 0
+                                ? '${formatRm(share)} paid'
+                                : due < share
+                                ? '${formatRm(due)} of ${formatRm(share)} owed'
+                                : '${formatRm(share)} owed',
+                            style: due == 0
+                                ? null
+                                : TextStyle(
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
+                          ),
+                        ],
                       ),
-                      trailing: Text(
-                        share == 0
-                            ? formatRm(0)
-                            : a.paid
-                            ? '${formatRm(share)} paid'
-                            : '${formatRm(share)} owed',
-                        style: a.paid || share == 0
-                            ? null
-                            : TextStyle(
-                                color: Theme.of(context).colorScheme.error,
-                              ),
-                      ),
+                      trailing: const Icon(Icons.chevron_right),
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) =>
@@ -161,12 +173,14 @@ class _Stat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: text.labelMedium),
-        Text(value, style: text.titleLarge),
-      ],
+    return MergeSemantics(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: text.labelMedium),
+          Text(value, style: text.titleLarge),
+        ],
+      ),
     );
   }
 }

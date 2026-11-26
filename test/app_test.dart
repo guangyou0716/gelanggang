@@ -77,9 +77,28 @@ void main() {
         .widget<SelectableText>(find.byKey(const Key('settle-text')))
         .data!;
     expect(text, contains('Split by time played:'));
-    expect(text, contains('- Aiman: RM 42.80 (paid, thanks!)'));
+    // Aiman paid RM 35.67 under the equal split; the new split asks more.
+    expect(text, contains('- Aiman: RM 42.80 (paid RM 35.67, RM 7.13 more)'));
     expect(text, contains('- Bee Ling: RM 42.80'));
     expect(text, contains('- Chandran: RM 21.40'));
+    expect(
+      find.text('Paid RM 35.67; share went up, RM 7.13 more due'),
+      findsOneWidget,
+    );
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.textContaining('RM 71.33 to collect'), findsOneWidget);
+
+    // He tops up: ticking Paid again records the new share in full.
+    await tester.tap(find.textContaining('Dewan Demo'));
+    await tester.pumpAndSettle();
+    await reveal(tester, find.bySemanticsLabel(RegExp('^Aiman paid')));
+    await tester.tap(find.bySemanticsLabel(RegExp('^Aiman paid')));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<SelectableText>(find.byKey(const Key('settle-text'))).data,
+      contains('- Aiman: RM 42.80 (paid, thanks!)'),
+    );
 
     // Back home: the session shows what is left to collect.
     await tester.pageBack();

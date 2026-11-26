@@ -3,13 +3,20 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../domain/costs.dart';
 import '../domain/models.dart';
 import '../domain/queue.dart';
 
-/// Where the app keeps its single JSON document.
+/// Where the app keeps its single JSON document, plus one spare slot for a
+/// document it could not read (so a change never destroys it).
 abstract interface class Storage {
   Future<String?> read();
   Future<void> write(String data);
+
+  Future<String?> readAside();
+
+  /// Null clears the slot.
+  Future<void> writeAside(String? data);
 }
 
 /// For tests and the first frame before the device storage is ready.
@@ -17,17 +24,25 @@ class MemoryStorage implements Storage {
   MemoryStorage([this.data]);
 
   String? data;
+  String? aside;
 
   @override
   Future<String?> read() async => data;
 
   @override
   Future<void> write(String value) async => data = value;
+
+  @override
+  Future<String?> readAside() async => aside;
+
+  @override
+  Future<void> writeAside(String? value) async => aside = value;
 }
 
 /// On the device (Android/iOS) or in the browser's local storage (web).
 class DeviceStorage implements Storage {
   static const _key = 'gelanggang.v1';
+  static const _asideKey = 'gelanggang.unreadable';
 
   @override
   Future<String?> read() async =>
@@ -36,6 +51,31 @@ class DeviceStorage implements Storage {
   @override
   Future<void> write(String data) async =>
       (await SharedPreferences.getInstance()).setString(_key, data);
+
+  @override
+  Future<String?> readAside() async =>
+      (await SharedPreferences.getInstance()).getString(_asideKey);
+
+  @override
+  Future<void> writeAside(String? data) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (data == null) {
+      await prefs.remove(_asideKey);
+    } else {
+      await prefs.setString(_asideKey, data);
+    }
+  }
+}
+
+/// What a backup holds, shown before it replaces anything.
+typedef BackupSummary = ({int players, int sessions});
+
+/// A document that passed every check, ready to replace the store's data.
+class _Document {
+  const _Document(this.players, this.sessions, this.nextId);
+  final List<Player> players;
+  final List<Session> sessions;
+  final int nextId;
 }
 
 /// Thrown for input the organiser can fix; the message is shown as is.
@@ -75,45 +115,191 @@ class AppStore extends ChangeNotifier {
     return null;
   }
 
-  /// Loads saved data. A missing or unreadable document starts empty (and is
-  /// not overwritten until the next change).
+  /// Saved data the app could not read (damaged, or from a newer version),
+  /// kept aside so the organiser can copy it out. Null when there is none.
+  String? get setAside => _setAside;
+  String? _setAside;
+
+  /// Whether [load] found a document (readable or not): not a first launch.
+  bool _hadSavedDocument = false;
+
+  /// Loads saved data. A missing document starts empty. An unreadable one
+  /// also starts empty, but is first copied to the storage's spare slot, so
+  /// the next change (which writes a new document) cannot destroy it.
   Future<void> load() async {
+    _setAside = await _storage.readAside();
     final raw = await _storage.read();
-    if (raw == null) return;
+    if (raw == null) {
+      notifyListeners();
+      return;
+    }
+    _hadSavedDocument = true;
     try {
-      final json = (jsonDecode(raw) as Map).cast<String, Object?>();
-      if (json['version'] != schemaVersion) return;
       // Parse everything before keeping any of it, so a bad document never
       // leaves the store half loaded (and then saved over the good data).
-      final players = [
-        for (final p in json['players']! as List<Object?>)
-          Player.fromJson((p! as Map).cast<String, Object?>()),
-      ];
-      final sessions = [
-        for (final s in json['sessions']! as List<Object?>)
-          Session.fromJson((s! as Map).cast<String, Object?>()),
-      ];
-      final nextId = json['nextId']! as int;
-      _players = players;
-      _sessions = sessions;
-      _nextId = nextId;
+      final doc = _parse(raw);
+      _players = doc.players;
+      _sessions = doc.sessions;
+      _nextId = doc.nextId;
     } on Object catch (e) {
-      debugPrint('gelanggang: ignoring unreadable saved data ($e)');
-      return;
+      debugPrint('gelanggang: setting aside unreadable saved data ($e)');
+      await _storage.writeAside(raw);
+      _setAside = raw;
     }
     notifyListeners();
   }
 
+  /// Forgets the data kept aside (after the organiser has copied it).
+  Future<void> discardSetAside() async {
+    await _storage.writeAside(null);
+    _setAside = null;
+    notifyListeners();
+  }
+
+  /// Reads a saved document or backup. Throws on anything unexpected; only
+  /// the version is checked, not whether the data makes sense.
+  static _Document _parse(String raw) {
+    final json = (jsonDecode(raw) as Map).cast<String, Object?>();
+    final version = json['version'];
+    if (version is int && version > schemaVersion) {
+      throw const InputError(
+        'This backup is from a newer version of gelanggang. Update the app, '
+        'then restore it.',
+      );
+    }
+    if (version != schemaVersion) {
+      throw const FormatException('Unknown version');
+    }
+    final players = [
+      for (final p in json['players']! as List<Object?>)
+        Player.fromJson((p! as Map).cast<String, Object?>()),
+    ];
+    final sessions = [
+      for (final s in json['sessions']! as List<Object?>)
+        Session.fromJson((s! as Map).cast<String, Object?>()),
+    ];
+    return _Document(players, sessions, json['nextId']! as int);
+  }
+
+  String _encode({bool pretty = false}) =>
+      (pretty ? const JsonEncoder.withIndent('  ') : const JsonEncoder())
+          .convert({
+            if (pretty) 'app': 'gelanggang',
+            'version': schemaVersion,
+            'nextId': _nextId,
+            'players': [for (final p in _players) p.toJson()],
+            'sessions': [for (final s in _sessions) s.toJson()],
+          });
+
+  /// Everything, as readable JSON the organiser can keep (message it to
+  /// themselves, save it in notes) and restore on another phone.
+  String exportBackup() => _encode(pretty: true);
+
+  BackupSummary get summary =>
+      (players: _players.length, sessions: _sessions.length);
+
+  /// Checks [text] as a backup without changing anything; throws an
+  /// [InputError] saying what is wrong.
+  static BackupSummary checkBackup(String text) {
+    final doc = _validate(text);
+    return (players: doc.players.length, sessions: doc.sessions.length);
+  }
+
+  /// Replaces all players and sessions with the backup in [text]. Nothing
+  /// changes unless the whole backup passes [checkBackup].
+  Future<void> restoreBackup(String text) async {
+    final doc = _validate(text);
+    _players = [...doc.players]
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    _sessions = doc.sessions;
+    _nextId = doc.nextId;
+    await _save();
+  }
+
+  /// A backup is held to the same rules as the app's own changes, so a
+  /// restored group behaves exactly like one entered by hand.
+  static _Document _validate(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) throw const InputError('Paste a backup first');
+    final _Document doc;
+    try {
+      doc = _parse(trimmed);
+    } on InputError {
+      rethrow;
+    } on Object {
+      throw const InputError(
+        'This is not a gelanggang backup, or part of it is missing. Copy the '
+        'whole backup and try again.',
+      );
+    }
+    final ids = <int>{};
+    final playerIds = <int>{};
+    final names = <String>{};
+    for (final p in doc.players) {
+      final name = p.name;
+      // Exactly as addPlayer would have saved it.
+      if (name.isEmpty ||
+          name.length > 40 ||
+          name != name.trim().replaceAll(RegExp(r'\s+'), ' ')) {
+        throw InputError('A player name in the backup is not valid: "$name"');
+      }
+      if (!names.add(name.toLowerCase())) {
+        throw InputError('$name is in the backup twice');
+      }
+      if (!ids.add(p.id)) throw const InputError('The backup repeats an id');
+      playerIds.add(p.id);
+    }
+    for (final s in doc.sessions) {
+      if (!ids.add(s.id)) throw const InputError('The backup repeats an id');
+      final where = 'Session ${s.date} (${s.venue})';
+      try {
+        _check(s);
+      } on InputError catch (e) {
+        throw InputError('$where: ${e.message}');
+      }
+      final present = <int>{};
+      for (final a in s.attendance) {
+        if (!playerIds.contains(a.playerId)) {
+          throw InputError('$where lists a player who is not in the backup');
+        }
+        if (!present.add(a.playerId)) {
+          throw InputError('$where lists a player twice');
+        }
+      }
+      final gameIds = <int>{};
+      final busyCourts = <int>{};
+      final onCourt = <int>{};
+      for (final g in s.games) {
+        final a = g.scoreA, b = g.scoreB;
+        final badScore =
+            (a == null) != (b == null) ||
+            (a != null &&
+                b != null &&
+                (a < 0 || a > 99 || b < 0 || b > 99 || a == b)) ||
+            (!g.finished && a != null);
+        if (!gameIds.add(g.id) ||
+            g.court < 1 ||
+            g.players.toSet().length != 4 ||
+            badScore ||
+            // Still on court: one game per court, one court per player.
+            (!g.finished &&
+                (!busyCourts.add(g.court) || !g.players.every(onCourt.add)))) {
+          throw InputError('$where has a game that is not valid');
+        }
+      }
+    }
+    final top = ids.fold<int>(0, (m, id) => id > m ? id : m);
+    // New players and sessions must never reuse an id from the backup.
+    return _Document(
+      doc.players,
+      doc.sessions,
+      doc.nextId > top ? doc.nextId : top + 1,
+    );
+  }
+
   Future<void> _save() async {
     notifyListeners();
-    await _storage.write(
-      jsonEncode({
-        'version': schemaVersion,
-        'nextId': _nextId,
-        'players': [for (final p in _players) p.toJson()],
-        'sessions': [for (final s in _sessions) s.toJson()],
-      }),
-    );
+    await _storage.write(_encode());
   }
 
   bool get isEmpty => _players.isEmpty && _sessions.isEmpty;
@@ -148,18 +334,36 @@ class AppStore extends ChangeNotifier {
     await _save();
   }
 
-  /// Marks every unpaid share of [playerId], in every session, as paid.
+  /// Marks [playerId] as paid (recording their share right now as the
+  /// amount) or not paid at session [sessionId].
+  Future<void> setPaid(int sessionId, int playerId, bool paid) async {
+    final s = session(sessionId)!;
+    final a = s.attendance.firstWhere((a) => a.playerId == playerId);
+    await updateAttendance(
+      sessionId,
+      paid
+          ? a.copyWith(paid: true, paidSen: sharesFor(s)[playerId] ?? 0)
+          : a.copyWith(paid: false),
+    );
+  }
+
+  /// Settles everything [playerId] still owes, in every session: each share
+  /// with something due is recorded as paid in full at today's amount.
   Future<void> settleAll(int playerId) async {
-    _sessions = [
-      for (final s in _sessions)
-        s.copyWith(
-          attendance: [
-            for (final a in s.attendance)
-              a.playerId == playerId ? a.copyWith(paid: true) : a,
-          ],
-        ),
-    ];
+    _sessions = [for (final s in _sessions) _settled(s, playerId)];
     await _save();
+  }
+
+  static Session _settled(Session s, int playerId) {
+    final shares = sharesFor(s);
+    return s.copyWith(
+      attendance: [
+        for (final a in s.attendance)
+          a.playerId == playerId && dueSen(a, shares[playerId] ?? 0) > 0
+              ? a.copyWith(paid: true, paidSen: shares[playerId] ?? 0)
+              : a,
+      ],
+    );
   }
 
   Future<void> removePlayer(int id) async {
@@ -411,8 +615,10 @@ class AppStore extends ChangeNotifier {
   }
 
   /// Synthetic demo data for the first launch (and the public web demo).
+  /// Never after a launch that found saved data, even an empty or unreadable
+  /// one: an organiser who cleared everything does not want the demo back.
   Future<void> seedDemo({required String today}) async {
-    if (!isEmpty) return;
+    if (!isEmpty || _hadSavedDocument) return;
     for (final name in [
       'Aiman',
       'Bee Ling',
@@ -480,7 +686,7 @@ class AppStore extends ChangeNotifier {
             a.playerId == late.id
                 ? a.copyWith(arriveMinute: 60)
                 : a.playerId == early.id
-                ? a.copyWith(leaveMinute: 90, paid: true)
+                ? a.copyWith(leaveMinute: 90)
                 : a,
         ],
       ),
@@ -499,5 +705,8 @@ class AppStore extends ChangeNotifier {
     }
     final next = suggestNext(session(s.id)!)!;
     await startGame(s.id, court: 1, teamA: next.teamA, teamB: next.teamB);
+    // Daniel paid his share before leaving early (after the games, which
+    // decide the shuttle split).
+    await setPaid(s.id, early.id, true);
   }
 }
