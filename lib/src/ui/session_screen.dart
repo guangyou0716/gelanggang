@@ -5,7 +5,9 @@ import '../data/store.dart';
 import '../domain/costs.dart';
 import '../domain/models.dart';
 import '../domain/money.dart';
+import '../domain/queue.dart';
 import 'common.dart';
+import 'queue_screen.dart';
 import 'session_form_screen.dart';
 
 class SessionScreen extends StatelessWidget {
@@ -153,6 +155,23 @@ class SessionScreen extends StatelessWidget {
                 ),
               ),
               Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: OutlinedButton.icon(
+                  key: const Key('open-queue'),
+                  icon: const Icon(Icons.sports_tennis),
+                  label: Text(
+                    'Court queue · ${onCourt(s).length} on court · '
+                    '${gamesLabel(s.games.where((g) => g.finished).length)} played',
+                  ),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) =>
+                          QueueScreen(store: store, sessionId: s.id),
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                 child: Text(
                   'Who came (${s.attendance.length})',
@@ -170,7 +189,10 @@ class SessionScreen extends StatelessWidget {
                   attendance: present[p.id],
                   session: s,
                   shareSen: shares[p.id],
-                  onToggle: () => store.toggleAttendance(s.id, p.id),
+                  onToggle: () => attempt(
+                    context,
+                    () => store.toggleAttendance(s.id, p.id),
+                  ),
                   onPaid: (paid) => store.updateAttendance(
                     s.id,
                     present[p.id]!.copyWith(paid: paid),
