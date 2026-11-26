@@ -24,6 +24,15 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
   final _form = GlobalKey<FormState>();
   late final Map<String, TextEditingController> _c;
 
+  /// When creating: the latest session, offered to fill the form in.
+  Session? _template;
+
+  /// The form was filled in from [_template].
+  bool _filled = false;
+
+  /// Check in [_template]'s players (still in the roster) on save.
+  bool _bringPlayers = true;
+
   Session? get _existing =>
       widget.sessionId == null ? null : widget.store.session(widget.sessionId!);
 
@@ -31,7 +40,7 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
   void initState() {
     super.initState();
     final s = _existing;
-    String rm(int sen) => (sen / 100).toStringAsFixed(2);
+    const rm = _rm;
     _c = {
       'date': TextEditingController(text: s?.date ?? isoDate(DateTime.now())),
       'venue': TextEditingController(text: s?.venue ?? ''),
@@ -49,6 +58,75 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
         text: s == null ? '0' : rm(s.guestFeeSen),
       ),
     };
+    if (widget.sessionId == null) _template = widget.store.lastSession;
+  }
+
+  static String _rm(int sen) => (sen / 100).toStringAsFixed(2);
+
+  /// Copies the last session's venue, times, courts and prices into the
+  /// form. The date stays today and shuttles start at 0: those are new.
+  void _fillFromTemplate() {
+    final s = _template!;
+    setState(() {
+      _filled = true;
+      _c['venue']!.text = s.venue;
+      _c['start']!.text = formatClock(s.startMinute);
+      _c['end']!.text = formatClock(s.endMinute);
+      _c['courts']!.text = '${s.courts}';
+      _c['rate']!.text = _rm(s.courtRateSen);
+      _c['shuttles']!.text = '0';
+      _c['shuttlePrice']!.text = _rm(s.shuttlePriceSen);
+      _c['guestFee']!.text = _rm(s.guestFeeSen);
+    });
+  }
+
+  Widget _repeatCard(Session s) {
+    final t = context.s;
+    final players = widget.store.rosterPlayersAt(s);
+    if (_filled) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              t(K.repeatFilled, {'date': t.date(s.date)}),
+              key: const Key('repeat-filled'),
+            ),
+            if (players.isNotEmpty)
+              CheckboxListTile(
+                key: const Key('repeat-players'),
+                contentPadding: EdgeInsets.zero,
+                value: _bringPlayers,
+                onChanged: (v) => setState(() => _bringPlayers = v ?? false),
+                title: Text(
+                  t(K.repeatPlayers, {'players': t.players(players.length)}),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+    return Card(
+      key: const Key('repeat-card'),
+      margin: const EdgeInsets.only(bottom: 16),
+      child: ListTile(
+        leading: const Icon(Icons.replay),
+        title: Text(t(K.repeatLast)),
+        subtitle: Text(
+          t(K.repeatLastBody, {
+            'date': t.date(s.date),
+            'venue': s.venue,
+            'players': t.players(players.length),
+          }),
+        ),
+        trailing: TextButton(
+          key: const Key('repeat-fill'),
+          onPressed: _fillFromTemplate,
+          child: Text(t(K.repeatFill)),
+        ),
+      ),
+    );
   }
 
   @override
@@ -85,6 +163,7 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
     final guestFee = parseRm(_c['guestFee']!.text)!;
     final existing = _existing;
     late int id;
+    final template = _filled ? _template : null;
     final ok = await attempt(context, () async {
       if (existing == null) {
         id = (await store.createSession(
@@ -97,6 +176,12 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
           shuttles: shuttles,
           shuttlePriceSen: shuttlePrice,
           guestFeeSen: guestFee,
+          courtSplit: template?.courtSplit ?? SplitMode.equal,
+          shuttleSplit: template?.shuttleSplit ?? SplitMode.equal,
+          singlesCourts: template?.singlesCourts ?? const [],
+          playerIds: template != null && _bringPlayers
+              ? store.rosterPlayersAt(template)
+              : const [],
         )).id;
       } else {
         // A shorter session cuts arrival/leaving times to fit.
@@ -165,6 +250,7 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            if (_template case final s?) _repeatCard(s),
             _field('date', t(K.dateField), validator: _required),
             _field(
               'venue',
