@@ -4,6 +4,7 @@ import '../data/store.dart';
 import '../domain/costs.dart';
 import '../domain/money.dart';
 import '../l10n/language.dart';
+import 'appearance.dart';
 import 'backup_screen.dart';
 import 'roster_screen.dart';
 import 'season_screen.dart';
@@ -11,10 +12,16 @@ import 'session_form_screen.dart';
 import 'session_screen.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key, required this.store, required this.language});
+  const HomeScreen({
+    super.key,
+    required this.store,
+    required this.language,
+    required this.appearance,
+  });
 
   final AppStore store;
   final LanguageSetting language;
+  final AppearanceSetting appearance;
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +34,7 @@ class HomeScreen extends StatelessWidget {
           appBar: AppBar(
             title: const Text('gelanggang'),
             actions: [
-              _LanguageButton(language: language),
+              _DisplayButton(language: language, appearance: appearance),
               IconButton(
                 tooltip: t(K.players),
                 icon: const Icon(Icons.group_outlined),
@@ -129,11 +136,30 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-/// Picks the app's language: the device's, or one chosen here (kept).
-class _LanguageButton extends StatelessWidget {
-  const _LanguageButton({required this.language});
+/// Picks the app's language (the device's, or one chosen here) and its
+/// appearance (light, dark, or the device's). Both are kept on the device.
+///
+/// One menu for both keeps the app bar to five buttons, so the title still
+/// fits on a narrow phone.
+class _DisplayButton extends StatelessWidget {
+  const _DisplayButton({required this.language, required this.appearance});
 
   final LanguageSetting language;
+  final AppearanceSetting appearance;
+
+  // Menu values; null would mean "closed".
+  static const _followDevice = 'device';
+  static const _appearancePrefix = 'appearance-';
+
+  void _select(String value) {
+    if (value.startsWith(_appearancePrefix)) {
+      appearance.choose(
+        Appearance.fromCode(value.substring(_appearancePrefix.length)),
+      );
+    } else {
+      language.choose(AppLanguage.fromCode(value));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -142,17 +168,23 @@ class _LanguageButton extends StatelessWidget {
       WidgetsBinding.instance.platformDispatcher.locales,
     );
     final chosen = language.chosen;
-    // A menu value for "follow the device"; null would mean "closed".
-    const followDevice = 'device';
+    final header = Theme.of(context).textTheme.labelLarge
+        ?.copyWith(color: Theme.of(context).colorScheme.primary);
+    PopupMenuItem<String> heading(String text) => PopupMenuItem<String>(
+      enabled: false,
+      height: 36,
+      child: Semantics(header: true, child: Text(text, style: header)),
+    );
     return PopupMenuButton<String>(
       key: const Key('language'),
-      tooltip: t(K.language),
+      tooltip: t(K.languageAndAppearance),
       icon: const Icon(Icons.translate),
-      onSelected: (code) => language.choose(AppLanguage.fromCode(code)),
+      onSelected: _select,
       itemBuilder: (_) => [
+        heading(t(K.language)),
         CheckedPopupMenuItem(
           key: const Key('language-device'),
-          value: followDevice,
+          value: _followDevice,
           checked: chosen == null,
           child: Text(t(K.languageDevice, {'language': device.nativeName})),
         ),
@@ -162,6 +194,19 @@ class _LanguageButton extends StatelessWidget {
             value: l.code,
             checked: chosen == l,
             child: Text(l.nativeName),
+          ),
+        const PopupMenuDivider(),
+        heading(t(K.appearance)),
+        for (final a in Appearance.values)
+          CheckedPopupMenuItem(
+            key: Key('appearance-${a.code}'),
+            value: '$_appearancePrefix${a.code}',
+            checked: appearance.chosen == a,
+            child: Text(switch (a) {
+              Appearance.device => t(K.appearanceDevice),
+              Appearance.light => t(K.appearanceLight),
+              Appearance.dark => t(K.appearanceDark),
+            }),
           ),
       ],
     );

@@ -8,6 +8,11 @@ It runs on Android, iOS and the web, keeps everything on the device (no account,
 money. It only works out the amounts and writes a message you can paste into WhatsApp.
 
 <p>
+  <img src="docs/demo.gif" alt="Short demo: the session list, a session with each player's share, the message for the group chat, the court queue, the season summary, and the app in dark mode" width="280">
+  <img src="docs/dark-session.png" alt="A session in dark mode: totals, split modes and each player's share" width="280">
+  <img src="docs/dark-queue.png" alt="The court queue in dark mode" width="280">
+</p>
+<p>
   <img src="docs/home.png" alt="Session list with the demo session" width="280">
   <img src="docs/session.png" alt="A session: courts split by time, shuttles by games, a guest on a flat fee and amounts still owed from last week" width="280">
   <img src="docs/queue.png" alt="Court queue: one court in play, the next four paired up, waiting list and game log" width="280">
@@ -111,16 +116,21 @@ money. It only works out the amounts and writes a message you can paste into Wha
   synthetic demo group so you can try it straight away (only on a real first launch, never over saved data).
 
 - **Languages**: English, Bahasa Melayu and 简体中文 (see below).
+- **Dark mode**: follows the device, or pick Light or Dark in the same menu as the language (kept on the device,
+  apart from your data). Every screen passes Material's contrast guideline in both themes (tested).
+- **App icon**: a shuttlecock on the app's teal, for Android, iOS and the web (including a maskable icon).
+  `tool/make_icon.py` draws it and writes every size (needs Pillow), so it can be redrawn instead of edited by
+  hand.
 
 ## Languages
 
-<img src="docs/language.png" alt="The language menu: Same as this device, English, Bahasa Melayu, 简体中文" width="240" align="right">
+<img src="docs/dark-menu.png" alt="The language and appearance menu in dark mode: Language (Same as this device, English, Bahasa Melayu, 简体中文) and Appearance (Same as this device, Light, Dark)" width="240" align="right">
 
 - The whole app is translated: every screen, dialog, button, screen-reader label and error message, and the
   two messages you paste into the group chat (the settle-up message and the balances reminder). Material's
   own texts (back button, menus, text editing) follow too.
 - By default the app follows the device language: Malay (`ms`) and Chinese (`zh`) devices get Bahasa Melayu
-  and 简体中文, anything else gets English. Pick a language with the 文A button on the home screen to override
+  and 简体中文, anything else gets English. Pick a language with the 文A button (language and appearance) on the home screen to override
   it; the choice is kept on the device (apart from your data, so a backup or restore never changes it), and
   *Same as this device* goes back to following the device.
 - Money is shown as `RM 1,234.50` in every language, as it is written in Malaysia. Dates: English keeps the
@@ -216,6 +226,10 @@ Built and tested with Flutter 3.50 (Dart 3.14).
   singles courts are cut to the new number of courts, a refused session does not use up an id, an old
   version 1 document (from the first app version) can be repeated and read back, and damaged saved data
   stays set aside. Nine deliberate bugs in this code each made a test fail.
+- Dark mode tests: the device's brightness is followed until a choice is made, a saved choice wins, the choice
+  is kept apart from the data (a restore does not change it, choosing a language does not change it), and a
+  saved value of the wrong type or an unknown one falls back to the device instead of breaking the launch.
+  The contrast, tap target and label guidelines run on every screen in dark mode, including the menu.
 - GitHub Actions runs `dart format`, `flutter analyze`, `flutter test --coverage` and `flutter build web` on
   every push and pull request, and a second job runs the [end-to-end tests](#end-to-end-tests-on-a-real-app)
   on the Linux desktop app under `xvfb`.
@@ -233,6 +247,10 @@ Built and tested with Flutter 3.50 (Dart 3.14).
 7. ✅ Player levels (1-5) and singles courts in the queue: no big level gaps among equally-waiting players,
    balanced team level sums, fairness order unchanged.
 8. ✅ "Same as last time" for a new session, and a season summary per player with a CSV copy.
+9. ✅ Dark mode (device / light / dark), app icon for every platform, demo GIF.
+
+The planned feature set is complete. Ideas for later (not planned): attendance reminders, sharing a session
+between two organisers.
 
 ## Privacy
 
