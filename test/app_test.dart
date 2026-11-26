@@ -43,6 +43,7 @@ void main() {
     // Session screen: RM 80 courts + RM 27 shuttles.
     expect(find.text('RM 107.00'), findsOneWidget);
     for (final name in ['Aiman', 'Bee Ling', 'Chandran']) {
+      await reveal(tester, find.bySemanticsLabel('$name came'));
       await tester.tap(find.bySemanticsLabel('$name came'));
       await tester.pumpAndSettle();
     }
@@ -51,10 +52,20 @@ void main() {
     expect(find.text('RM 35.66'), findsOneWidget);
 
     // Aiman paid; Chandran came an hour late and the split goes by time.
+    await reveal(tester, find.widgetWithText(FilterChip, 'Paid').first);
     await tester.tap(find.widgetWithText(FilterChip, 'Paid').first);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('By time played'));
-    await tester.pumpAndSettle();
+    for (final picker in ['court-split', 'shuttle-split']) {
+      await reveal(tester, find.byKey(Key(picker)));
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(Key(picker)),
+          matching: find.text('By time'),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+    await reveal(tester, find.text('20:00-22:00 · tap to change').last);
     await tester.tap(find.text('20:00-22:00 · tap to change').last);
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('arrive')), '21:00');
@@ -82,6 +93,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.textContaining('Demo Sports Hall'));
     await tester.pumpAndSettle();
+    await reveal(tester, find.text('20:00-22:00 · tap to change').first);
     await tester.tap(find.text('20:00-22:00 · tap to change').first);
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('arrive')), '19:00');

@@ -11,7 +11,7 @@ void main() {
     final store = await pumpApp(tester);
     await store.seedDemo(today: '2026-11-26');
     await tester.pumpAndSettle();
-    final sid = store.sessions.single.id;
+    final sid = store.sessions.first.id;
     String name(int id) => store.names[id]!;
 
     await tester.tap(find.textContaining('Demo Sports Hall'));
@@ -96,6 +96,6 @@ void main() {
       find.text('Aiman has games in this session; remove those games first'),
       findsOneWidget,
     );
-    expect(store.sessions.single.attendance, hasLength(8));
+    expect(store.sessions.first.attendance, hasLength(8));
   });
 }

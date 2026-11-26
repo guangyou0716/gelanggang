@@ -21,7 +21,8 @@ Session session({
   courtRateSen: rate,
   shuttles: shuttles,
   shuttlePriceSen: shuttlePrice,
-  splitMode: mode,
+  courtSplit: mode,
+  shuttleSplit: mode,
   attendance: attendance,
 );
 

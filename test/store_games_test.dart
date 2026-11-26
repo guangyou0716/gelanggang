@@ -191,7 +191,7 @@ void main() {
   test('demo data includes a game log and a game on court', () async {
     final store = AppStore(MemoryStorage());
     await store.seedDemo(today: '2026-11-26');
-    final s = store.sessions.single;
+    final s = store.sessions.first;
     expect(s.games.where((g) => g.finished), hasLength(2));
     expect(onCourt(s), hasLength(4));
     expect(waitingOrder(s), hasLength(4));

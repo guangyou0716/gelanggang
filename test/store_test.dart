@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gelanggang/src/data/store.dart';
 import 'package:gelanggang/src/domain/costs.dart';
+import 'package:gelanggang/src/domain/history.dart';
 import 'package:gelanggang/src/domain/models.dart';
 
 Future<Session> newSession(AppStore store, {String date = '2026-11-26'}) =>
@@ -114,7 +115,13 @@ void main() {
       final newer = await newSession(store);
       await store.toggleAttendance(newer.id, p.id);
       await store.updateSession(
-        store.session(newer.id)!.copyWith(splitMode: SplitMode.byMinutes),
+        store
+            .session(newer.id)!
+            .copyWith(
+              courtSplit: SplitMode.byMinutes,
+              shuttleSplit: SplitMode.byGames,
+              guestFeeSen: 1200,
+            ),
       );
 
       final again = AppStore(storage);
@@ -122,7 +129,9 @@ void main() {
       expect(again.players.single.name, 'Aiman');
       expect(again.sessions.map((s) => s.id), [newer.id, older.id]);
       final s = again.session(newer.id)!;
-      expect(s.splitMode, SplitMode.byMinutes);
+      expect(s.courtSplit, SplitMode.byMinutes);
+      expect(s.shuttleSplit, SplitMode.byGames);
+      expect(s.guestFeeSen, 1200);
       expect(s.attendance.single.playerId, p.id);
       // New ids keep counting up after a reload.
       expect((await again.addPlayer('Bee Ling')).id, greaterThan(newer.id));
@@ -146,17 +155,25 @@ void main() {
   );
 
   test(
-    'demo data: synthetic players, one session split by time, only when empty',
+    'demo data: synthetic players, last week and today, only when empty',
     () async {
       final store = AppStore(MemoryStorage());
-      await store.seedDemo(today: '2026-11-26');
+      await store.seedDemo(today: '2026-12-03');
       expect(store.players, hasLength(8));
-      final s = store.sessions.single;
-      expect(s.splitMode, SplitMode.byMinutes);
+      expect(store.sessions.map((s) => s.date), ['2026-12-03', '2026-11-26']);
+      final s = store.sessions.first;
+      expect(s.courtSplit, SplitMode.byMinutes);
+      expect(s.shuttleSplit, SplitMode.byGames);
+      expect(guestFeeApplies(s), isTrue);
       expect(sharesFor(s).values.reduce((a, b) => a + b), totalCostSen(s));
       expect(outstandingSen(s), lessThan(totalCostSen(s)));
+      // Two regulars still owe for last week.
+      final past = store.sessions.last;
+      expect(past.attendance.where((a) => !a.paid), hasLength(2));
+      expect(past.attendance.any((a) => a.guest), isFalse);
+      expect(carriedOver(store.sessions, s), hasLength(2));
       await store.seedDemo(today: '2026-11-27');
-      expect(store.sessions, hasLength(1));
+      expect(store.sessions, hasLength(2));
     },
   );
 }

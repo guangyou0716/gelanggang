@@ -1,5 +1,6 @@
 import 'models.dart';
 import 'money.dart';
+import 'queue.dart';
 import 'split.dart';
 
 /// Court hire: courts x hourly rate x hours, rounded half up to the sen.
@@ -12,27 +13,111 @@ int shuttleCostSen(Session s) => s.shuttles * s.shuttlePriceSen;
 
 int totalCostSen(Session s) => courtCostSen(s) + shuttleCostSen(s);
 
-/// What each player present owes for [s], keyed by player id, adding up to
+/// One player's part of a session's cost.
+typedef Share = ({int courtSen, int shuttleSen, int guestFeeSen});
+
+extension ShareTotal on Share {
+  int get totalSen => courtSen + shuttleSen + guestFeeSen;
+}
+
+/// Whether [s] charges its guests the flat fee: it has a fee, at least one
+/// guest and at least one regular to share the rest. Otherwise guests share
+/// like everyone else.
+bool guestFeeApplies(Session s) =>
+    s.guestFeeSen > 0 &&
+    s.attendance.any((a) => a.guest) &&
+    s.attendance.any((a) => !a.guest);
+
+/// Whether the guests' flat fees would come to the whole session or more, in
+/// which case the guests split the total instead (see [shareBreakdown]).
+bool guestFeesCoverAll(Session s) =>
+    guestFeeApplies(s) &&
+    s.guestFeeSen * s.attendance.where((a) => a.guest).length >=
+        totalCostSen(s);
+
+/// How each player present shares [s], keyed by player id. The parts add up to
 /// exactly [totalCostSen]. Empty when nobody is present.
-Map<int, int> sharesFor(Session s) {
+///
+/// With a guest fee, each guest pays the flat fee (it goes towards the court
+/// hire first, then the shuttles) and the regulars share what is left. If the
+/// fees would come to more than the whole session, the guests split the total
+/// equally instead and the regulars pay nothing.
+Map<int, Share> shareBreakdown(Session s) {
   if (s.attendance.isEmpty) return {};
-  final weights = [
+  var courtPot = courtCostSen(s);
+  var shuttlePot = shuttleCostSen(s);
+  final fees = <int, int>{};
+  var payers = s.attendance;
+  if (guestFeeApplies(s)) {
+    final guests = [
+      for (final a in s.attendance)
+        if (a.guest) a.playerId,
+    ];
+    final total = courtPot + shuttlePot;
+    final feeTotal = s.guestFeeSen * guests.length;
+    if (feeTotal >= total) {
+      final equal = splitByWeights(total, List.filled(guests.length, 1));
+      for (var i = 0; i < guests.length; i++) {
+        fees[guests[i]] = equal[i];
+      }
+      courtPot = 0;
+      shuttlePot = 0;
+    } else {
+      for (final g in guests) {
+        fees[g] = s.guestFeeSen;
+      }
+      final fromCourt = feeTotal < courtPot ? feeTotal : courtPot;
+      courtPot -= fromCourt;
+      shuttlePot -= feeTotal - fromCourt;
+    }
+    payers = [
+      for (final a in s.attendance)
+        if (!a.guest) a,
+    ];
+  }
+  final court = _splitPot(s, courtPot, payers, s.courtSplit);
+  final shuttle = _splitPot(s, shuttlePot, payers, s.shuttleSplit);
+  return {
     for (final a in s.attendance)
-      switch (s.splitMode) {
+      a.playerId: (
+        courtSen: court[a.playerId] ?? 0,
+        shuttleSen: shuttle[a.playerId] ?? 0,
+        guestFeeSen: fees[a.playerId] ?? 0,
+      ),
+  };
+}
+
+Map<int, int> _splitPot(
+  Session s,
+  int pot,
+  List<Attendance> payers,
+  SplitMode mode,
+) {
+  if (payers.isEmpty) return {};
+  final games = mode == SplitMode.byGames ? gamesPlayed(s) : const <int, int>{};
+  final weights = [
+    for (final a in payers)
+      switch (mode) {
         SplitMode.equal => 1,
         SplitMode.byMinutes => a.minutes,
+        SplitMode.byGames => games[a.playerId] ?? 0,
       },
   ];
-  // Everyone present for zero minutes: fall back to an equal split.
+  // Nobody present for any minutes, or no games logged yet: split equally.
   final useWeights = weights.every((w) => w == 0)
       ? List.filled(weights.length, 1)
       : weights;
-  final shares = splitByWeights(totalCostSen(s), useWeights);
+  final shares = splitByWeights(pot, useWeights);
   return {
-    for (var i = 0; i < s.attendance.length; i++)
-      s.attendance[i].playerId: shares[i],
+    for (var i = 0; i < payers.length; i++) payers[i].playerId: shares[i],
   };
 }
+
+/// What each player present owes for [s] in total, keyed by player id,
+/// adding up to exactly [totalCostSen]. Empty when nobody is present.
+Map<int, int> sharesFor(Session s) => {
+  for (final e in shareBreakdown(s).entries) e.key: e.value.totalSen,
+};
 
 /// Total still owed for [s] by players not marked paid.
 int outstandingSen(Session s) {
@@ -59,9 +144,22 @@ int? parseClock(String input) {
   return h * 60 + m;
 }
 
+String _modeText(SplitMode m) => switch (m) {
+  SplitMode.equal => 'equally',
+  SplitMode.byMinutes => 'by time played',
+  SplitMode.byGames => 'by games played',
+};
+
 /// A message the organiser can paste into the group chat. Nothing is sent by
 /// the app, and no payment links are made.
-String settleUpText(Session s, Map<int, String> names) {
+///
+/// [earlierSen] is what each player still owes from earlier sessions (see
+/// `carriedOver` in history.dart); it is added to their line.
+String settleUpText(
+  Session s,
+  Map<int, String> names, {
+  Map<int, int> earlierSen = const {},
+}) {
   final shares = sharesFor(s);
   final buffer = StringBuffer()
     ..writeln(
@@ -69,16 +167,35 @@ String settleUpText(Session s, Map<int, String> names) {
     )
     ..writeln(
       'Courts ${formatRm(courtCostSen(s))} + shuttles ${formatRm(shuttleCostSen(s))} = ${formatRm(totalCostSen(s))}',
-    )
-    ..writeln(switch (s.splitMode) {
-      SplitMode.equal => 'Split equally:',
-      SplitMode.byMinutes => 'Split by time played:',
-    });
-  for (final a in s.attendance) {
-    final paid = a.paid ? ' (paid, thanks!)' : '';
-    buffer.writeln(
-      '- ${names[a.playerId] ?? '?'}: ${formatRm(shares[a.playerId] ?? 0)}$paid',
     );
+  if (guestFeesCoverAll(s)) {
+    buffer.writeln('Guests share the whole cost.');
+  } else if (guestFeeApplies(s)) {
+    buffer.writeln('Guests pay a flat ${formatRm(s.guestFeeSen)}.');
+  }
+  buffer.writeln(
+    s.courtSplit == s.shuttleSplit
+        ? 'Split ${_modeText(s.courtSplit)}:'
+        : 'Courts split ${_modeText(s.courtSplit)}, '
+              'shuttles ${_modeText(s.shuttleSplit)}:',
+  );
+  for (final a in s.attendance) {
+    final share = shares[a.playerId] ?? 0;
+    final earlier = earlierSen[a.playerId] ?? 0;
+    final guest = a.guest ? ' (guest)' : '';
+    final String amount;
+    if (a.paid) {
+      amount =
+          '${formatRm(share)} (paid, thanks!)'
+          '${earlier > 0 ? ' · ${formatRm(earlier)} still owed from earlier sessions' : ''}';
+    } else if (earlier > 0) {
+      amount =
+          '${formatRm(share)} + ${formatRm(earlier)} from earlier sessions '
+          '= ${formatRm(share + earlier)}';
+    } else {
+      amount = formatRm(share);
+    }
+    buffer.writeln('- ${names[a.playerId] ?? '?'}$guest: $amount');
   }
   return buffer.toString().trimRight();
 }

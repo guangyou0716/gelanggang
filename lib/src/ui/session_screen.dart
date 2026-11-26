@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../data/store.dart';
 import '../domain/costs.dart';
+import '../domain/history.dart';
 import '../domain/models.dart';
 import '../domain/money.dart';
 import '../domain/queue.dart';
@@ -69,6 +70,7 @@ class SessionScreen extends StatelessWidget {
         final shares = sharesFor(s);
         final present = {for (final a in s.attendance) a.playerId: a};
         final owed = outstandingSen(s);
+        final earlier = carriedOver(store.sessions, s);
         final text = Theme.of(context).textTheme;
         return Scaffold(
           appBar: AppBar(
@@ -136,24 +138,35 @@ class SessionScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                child: SegmentedButton<SplitMode>(
-                  segments: const [
-                    ButtonSegment(
-                      value: SplitMode.equal,
-                      label: Text('Split equally'),
-                    ),
-                    ButtonSegment(
-                      value: SplitMode.byMinutes,
-                      label: Text('By time played'),
-                    ),
-                  ],
-                  selected: {s.splitMode},
-                  onSelectionChanged: (mode) =>
-                      store.updateSession(s.copyWith(splitMode: mode.single)),
-                ),
+              _SplitPicker(
+                label: 'Court cost',
+                pickerKey: const Key('court-split'),
+                mode: s.courtSplit,
+                onChanged: (mode) =>
+                    store.updateSession(s.copyWith(courtSplit: mode)),
               ),
+              _SplitPicker(
+                label: 'Shuttles',
+                pickerKey: const Key('shuttle-split'),
+                mode: s.shuttleSplit,
+                onChanged: (mode) =>
+                    store.updateSession(s.copyWith(shuttleSplit: mode)),
+              ),
+              if (s.guestFeeSen > 0)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: Text(
+                    guestFeesCoverAll(s)
+                        ? 'The guest fees come to the whole cost, so the '
+                              'guests share it and regulars pay nothing.'
+                        : guestFeeApplies(s)
+                        ? 'Guests pay a flat ${formatRm(s.guestFeeSen)}; '
+                              'regulars share the rest.'
+                        : 'Guest fee ${formatRm(s.guestFeeSen)} applies when '
+                              'guests and regulars both come.',
+                    style: text.bodySmall,
+                  ),
+                ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                 child: OutlinedButton.icon(
@@ -189,6 +202,7 @@ class SessionScreen extends StatelessWidget {
                   attendance: present[p.id],
                   session: s,
                   shareSen: shares[p.id],
+                  earlierSen: earlier[p.id] ?? 0,
                   onToggle: () => attempt(
                     context,
                     () => store.toggleAttendance(s.id, p.id),
@@ -198,6 +212,8 @@ class SessionScreen extends StatelessWidget {
                     present[p.id]!.copyWith(paid: paid),
                   ),
                   onTimes: () => _editTimes(context, s, present[p.id]!, p.name),
+                  onGuest: (guest) =>
+                      store.setAttendanceGuest(s.id, p.id, guest),
                 ),
               if (s.attendance.isNotEmpty) ...[
                 Padding(
@@ -210,7 +226,7 @@ class SessionScreen extends StatelessWidget {
                     child: Padding(
                       padding: const EdgeInsets.all(12),
                       child: SelectableText(
-                        settleUpText(s, names),
+                        settleUpText(s, names, earlierSen: earlier),
                         key: const Key('settle-text'),
                       ),
                     ),
@@ -221,7 +237,9 @@ class SessionScreen extends StatelessWidget {
                   child: FilledButton.icon(
                     onPressed: () async {
                       await Clipboard.setData(
-                        ClipboardData(text: settleUpText(s, names)),
+                        ClipboardData(
+                          text: settleUpText(s, names, earlierSen: earlier),
+                        ),
                       );
                       if (context.mounted) {
                         toast(
@@ -262,24 +280,78 @@ class _Figure extends StatelessWidget {
   }
 }
 
+class _SplitPicker extends StatelessWidget {
+  const _SplitPicker({
+    required this.label,
+    required this.pickerKey,
+    required this.mode,
+    required this.onChanged,
+  });
+
+  final String label;
+  final Key pickerKey;
+  final SplitMode mode;
+  final ValueChanged<SplitMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: 4),
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<SplitMode>(
+              key: pickerKey,
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: SplitMode.equal, label: Text('Equally')),
+                ButtonSegment(
+                  value: SplitMode.byMinutes,
+                  label: Text('By time'),
+                ),
+                ButtonSegment(
+                  value: SplitMode.byGames,
+                  label: Text('By games'),
+                ),
+              ],
+              selected: {mode},
+              onSelectionChanged: (m) => onChanged(m.single),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PlayerRow extends StatelessWidget {
   const _PlayerRow({
     required this.name,
     required this.attendance,
     required this.session,
     required this.shareSen,
+    required this.earlierSen,
     required this.onToggle,
     required this.onPaid,
     required this.onTimes,
+    required this.onGuest,
   });
 
   final String name;
   final Attendance? attendance;
   final Session session;
   final int? shareSen;
+
+  /// Still owed from earlier sessions.
+  final int earlierSen;
   final VoidCallback onToggle;
   final ValueChanged<bool> onPaid;
   final VoidCallback onTimes;
+  final ValueChanged<bool> onGuest;
 
   @override
   Widget build(BuildContext context) {
@@ -293,12 +365,30 @@ class _PlayerRow extends StatelessWidget {
       title: Text(name),
       subtitle: a == null
           ? null
-          : InkWell(
-              onTap: onTimes,
-              child: Text(
-                '${formatClock(session.startMinute + a.arriveMinute)}-'
-                '${formatClock(session.startMinute + a.leaveMinute)} · tap to change',
-              ),
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                InkWell(
+                  onTap: onTimes,
+                  child: Text(
+                    '${formatClock(session.startMinute + a.arriveMinute)}-'
+                    '${formatClock(session.startMinute + a.leaveMinute)} · tap to change',
+                  ),
+                ),
+                if (a.guest || earlierSen > 0)
+                  Text(
+                    [
+                      if (a.guest) 'Guest',
+                      if (earlierSen > 0)
+                        '${formatRm(earlierSen)} owed from earlier',
+                    ].join(' · '),
+                    style: TextStyle(
+                      color: earlierSen > 0
+                          ? Theme.of(context).colorScheme.error
+                          : null,
+                    ),
+                  ),
+              ],
             ),
       trailing: a == null
           ? null
@@ -311,6 +401,18 @@ class _PlayerRow extends StatelessWidget {
                   label: const Text('Paid'),
                   selected: a.paid,
                   onSelected: onPaid,
+                ),
+                PopupMenuButton<bool>(
+                  tooltip: 'More for $name',
+                  onSelected: onGuest,
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: !a.guest,
+                      child: Text(
+                        a.guest ? 'Count as a regular' : 'Count as a guest',
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

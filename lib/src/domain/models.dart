@@ -3,15 +3,28 @@
 library;
 
 class Player {
-  const Player({required this.id, required this.name});
+  const Player({required this.id, required this.name, this.guest = false});
 
   final int id;
   final String name;
 
-  Map<String, Object?> toJson() => {'id': id, 'name': name};
+  /// Not a regular: new check-ins start as guests (see [Attendance.guest]).
+  final bool guest;
 
-  static Player fromJson(Map<String, Object?> json) =>
-      Player(id: json['id']! as int, name: json['name']! as String);
+  Player copyWith({bool? guest}) =>
+      Player(id: id, name: name, guest: guest ?? this.guest);
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name,
+    if (guest) 'guest': true,
+  };
+
+  static Player fromJson(Map<String, Object?> json) => Player(
+    id: json['id']! as int,
+    name: json['name']! as String,
+    guest: json['guest'] as bool? ?? false,
+  );
 }
 
 /// How a session's cost is shared.
@@ -22,6 +35,15 @@ enum SplitMode {
   /// In proportion to the minutes each player was there (late arrivals and
   /// early leavers pay less).
   byMinutes,
+
+  /// In proportion to the games each player started (handy for shuttles).
+  byGames;
+
+  /// Unknown or missing names (older or damaged data) read as [equal].
+  static SplitMode parse(Object? name) => SplitMode.values.firstWhere(
+    (m) => m.name == name,
+    orElse: () => SplitMode.equal,
+  );
 }
 
 /// A player at a session, with the minutes after the session start when they
@@ -33,6 +55,7 @@ class Attendance {
     required this.leaveMinute,
     this.paid = false,
     this.resting = false,
+    this.guest = false,
   });
 
   final int playerId;
@@ -44,6 +67,11 @@ class Attendance {
   /// next game.
   final bool resting;
 
+  /// A guest at this session: pays the session's flat guest fee (when it has
+  /// one) instead of a share. Kept per session, so changing the roster later
+  /// does not rewrite old sessions.
+  final bool guest;
+
   int get minutes => leaveMinute - arriveMinute;
 
   Attendance copyWith({
@@ -51,12 +79,14 @@ class Attendance {
     int? leaveMinute,
     bool? paid,
     bool? resting,
+    bool? guest,
   }) => Attendance(
     playerId: playerId,
     arriveMinute: arriveMinute ?? this.arriveMinute,
     leaveMinute: leaveMinute ?? this.leaveMinute,
     paid: paid ?? this.paid,
     resting: resting ?? this.resting,
+    guest: guest ?? this.guest,
   );
 
   Map<String, Object?> toJson() => {
@@ -65,6 +95,7 @@ class Attendance {
     'leave': leaveMinute,
     'paid': paid,
     if (resting) 'resting': true,
+    if (guest) 'guest': true,
   };
 
   static Attendance fromJson(Map<String, Object?> json) => Attendance(
@@ -73,6 +104,7 @@ class Attendance {
     leaveMinute: json['leave']! as int,
     paid: json['paid'] as bool? ?? false,
     resting: json['resting'] as bool? ?? false,
+    guest: json['guest'] as bool? ?? false,
   );
 }
 
@@ -88,7 +120,9 @@ class Session {
     required this.courtRateSen,
     required this.shuttles,
     required this.shuttlePriceSen,
-    this.splitMode = SplitMode.equal,
+    this.courtSplit = SplitMode.equal,
+    this.shuttleSplit = SplitMode.equal,
+    this.guestFeeSen = 0,
     this.attendance = const [],
     this.games = const [],
   });
@@ -109,7 +143,16 @@ class Session {
   final int courtRateSen;
   final int shuttles;
   final int shuttlePriceSen;
-  final SplitMode splitMode;
+
+  /// How the court hire is shared.
+  final SplitMode courtSplit;
+
+  /// How the shuttle cost is shared.
+  final SplitMode shuttleSplit;
+
+  /// Flat fee each guest pays instead of a share; 0 means guests share like
+  /// everyone else.
+  final int guestFeeSen;
   final List<Attendance> attendance;
 
   /// Doubles games in the order they were started.
@@ -126,7 +169,9 @@ class Session {
     int? courtRateSen,
     int? shuttles,
     int? shuttlePriceSen,
-    SplitMode? splitMode,
+    SplitMode? courtSplit,
+    SplitMode? shuttleSplit,
+    int? guestFeeSen,
     List<Attendance>? attendance,
     List<Game>? games,
   }) => Session(
@@ -139,7 +184,9 @@ class Session {
     courtRateSen: courtRateSen ?? this.courtRateSen,
     shuttles: shuttles ?? this.shuttles,
     shuttlePriceSen: shuttlePriceSen ?? this.shuttlePriceSen,
-    splitMode: splitMode ?? this.splitMode,
+    courtSplit: courtSplit ?? this.courtSplit,
+    shuttleSplit: shuttleSplit ?? this.shuttleSplit,
+    guestFeeSen: guestFeeSen ?? this.guestFeeSen,
     attendance: attendance ?? this.attendance,
     games: games ?? this.games,
   );
@@ -154,35 +201,45 @@ class Session {
     'courtRateSen': courtRateSen,
     'shuttles': shuttles,
     'shuttlePriceSen': shuttlePriceSen,
-    'splitMode': splitMode.name,
+    // Read by app versions before separate court/shuttle modes.
+    'splitMode': courtSplit.name,
+    'courtSplit': courtSplit.name,
+    'shuttleSplit': shuttleSplit.name,
+    if (guestFeeSen != 0) 'guestFeeSen': guestFeeSen,
     'attendance': [for (final a in attendance) a.toJson()],
     'games': [for (final g in games) g.toJson()],
   };
 
-  static Session fromJson(Map<String, Object?> json) => Session(
-    id: json['id']! as int,
-    date: json['date']! as String,
-    venue: json['venue']! as String,
-    startMinute: json['start']! as int,
-    endMinute: json['end']! as int,
-    courts: json['courts']! as int,
-    courtRateSen: json['courtRateSen']! as int,
-    shuttles: json['shuttles']! as int,
-    shuttlePriceSen: json['shuttlePriceSen']! as int,
-    splitMode: SplitMode.values.firstWhere(
-      (m) => m.name == json['splitMode'],
-      orElse: () => SplitMode.equal,
-    ),
-    attendance: [
-      for (final a in json['attendance']! as List<Object?>)
-        Attendance.fromJson((a! as Map).cast<String, Object?>()),
-    ],
-    // Saved before the court queue existed: no games.
-    games: [
-      for (final g in json['games'] as List<Object?>? ?? const [])
-        Game.fromJson((g! as Map).cast<String, Object?>()),
-    ],
-  );
+  static Session fromJson(Map<String, Object?> json) {
+    final guestFeeSen = json['guestFeeSen'] as int? ?? 0;
+    if (guestFeeSen < 0) {
+      throw const FormatException('A guest fee cannot be negative');
+    }
+    return Session(
+      id: json['id']! as int,
+      date: json['date']! as String,
+      venue: json['venue']! as String,
+      startMinute: json['start']! as int,
+      endMinute: json['end']! as int,
+      courts: json['courts']! as int,
+      courtRateSen: json['courtRateSen']! as int,
+      shuttles: json['shuttles']! as int,
+      shuttlePriceSen: json['shuttlePriceSen']! as int,
+      // Saved before separate modes: one mode for both costs.
+      courtSplit: SplitMode.parse(json['courtSplit'] ?? json['splitMode']),
+      shuttleSplit: SplitMode.parse(json['shuttleSplit'] ?? json['splitMode']),
+      guestFeeSen: guestFeeSen,
+      attendance: [
+        for (final a in json['attendance']! as List<Object?>)
+          Attendance.fromJson((a! as Map).cast<String, Object?>()),
+      ],
+      // Saved before the court queue existed: no games.
+      games: [
+        for (final g in json['games'] as List<Object?>? ?? const [])
+          Game.fromJson((g! as Map).cast<String, Object?>()),
+      ],
+    );
+  }
 }
 
 /// A doubles game on one court: [teamA] against [teamB], two players each.
