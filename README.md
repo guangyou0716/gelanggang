@@ -114,6 +114,30 @@ flutter test                 # unit + widget tests
 flutter build web --release  # static site in build/web
 ```
 
+### End-to-end tests on a real app
+
+`integration_test/app_flows_test.dart` starts the real app (the same `loadApp()` as `main()`, with the real
+`shared_preferences` plugin and clipboard) and drives it like an organiser:
+
+1. **A club night**: first launch shows the demo group; add a player (a duplicate is refused); create a session;
+   check in five players; run a court-queue game and log 21-15; split courts and shuttles by games (the player
+   who only waited pays RM 0.00); mark a share paid; then close and reopen the app and find everything,
+   including the game and the payment, read back from the device.
+2. **Backup round-trip**: copy a backup through the system clipboard, start a "new phone" with nothing saved,
+   refuse a cut-off paste, restore the whole backup after the confirmation, restart, and check it stayed.
+3. **Language switch**: switch to 简体中文 (dates and the settle-up message follow), restart and stay in Chinese,
+   switch to Bahasa Melayu, then back to following the device.
+
+Each flow starts with nothing saved (so running them clears the app's saved data on that device), checks what the plugin wrote to disk (not just its in-memory copy), and
+runs on a phone-shaped 432 x 960 screen. On Linux (as in CI):
+
+```bash
+sudo apt-get install clang cmake ninja-build pkg-config libgtk-3-dev xvfb   # Linux desktop toolchain
+xvfb-run -a flutter test integration_test -d linux                          # or -d <android device>
+```
+
+Breaking the data save, the language save or the restore made these tests fail (checked on purpose).
+
 Built and tested with Flutter 3.50 (Dart 3.14).
 
 ## How it is built
@@ -146,7 +170,10 @@ Built and tested with Flutter 3.50 (Dart 3.14).
   checks are mutation-tested (each was broken on purpose and a test failed). Language tests are described
   under [Languages](#languages).
 - GitHub Actions runs `dart format`, `flutter analyze`, `flutter test --coverage` and `flutter build web` on
-  every push and pull request.
+  every push and pull request, and a second job runs the [end-to-end tests](#end-to-end-tests-on-a-real-app)
+  on the Linux desktop app under `xvfb`.
+- Long dates in the session title (Chinese and Malay, with the weekday) shrink to fit a narrow phone instead of
+  losing the weekday to an ellipsis (tested at 360 dp, normal and 1.3x text).
 
 ## Roadmap
 
@@ -155,7 +182,8 @@ Built and tested with Flutter 3.50 (Dart 3.14).
 3. ✅ Split by games, separate court/shuttle modes, guest fee, balances carried over, player history.
 4. ✅ Backup/restore, unreadable data set aside, paid amounts, accessibility pass.
 5. ✅ Bahasa Melayu and 简体中文 (whole UI and the group messages), language picker, one-step "not paid".
-6. Device integration tests (`integration_test`), then levels and singles in the queue.
+6. ✅ End-to-end tests on the real app (`integration_test`, Linux desktop in CI), session title fits narrow phones.
+7. Levels and singles in the queue.
 
 ## Privacy
 
