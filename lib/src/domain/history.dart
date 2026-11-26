@@ -1,6 +1,7 @@
 /// Across sessions: what each player still owes and how often they come.
 library;
 
+import '../l10n/strings.dart';
 import 'costs.dart';
 import 'money.dart';
 import 'models.dart';
@@ -85,9 +86,13 @@ Map<int, int> carriedOver(Iterable<Session> sessions, Session current) {
   return owed;
 }
 
-/// A reminder listing everyone who still owes something, most owed first.
+/// A reminder (in [strings]' language) listing everyone who still owes something, most owed first.
 /// Null when everyone has paid.
-String? balancesText(Iterable<Session> sessions, Map<int, String> names) {
+String? balancesText(
+  Iterable<Session> sessions,
+  Map<int, String> names, {
+  Strings strings = Strings.en,
+}) {
   final owing =
       [
         for (final e in playerRecords(sessions).entries)
@@ -100,12 +105,14 @@ String? balancesText(Iterable<Session> sessions, Map<int, String> names) {
   if (owing.isEmpty) return null;
   final total = owing.fold<int>(0, (sum, e) => sum + e.value.owedSen);
   final buffer = StringBuffer()
-    ..writeln('Badminton balances (${formatRm(total)} to collect):');
+    ..writeln(strings(K.balHeader, {'amount': formatRm(total)}));
   for (final e in owing) {
-    final n = e.value.unpaidSessions;
     buffer.writeln(
-      '- ${names[e.key] ?? '?'}: ${formatRm(e.value.owedSen)} '
-      '($n session${n == 1 ? '' : 's'})',
+      strings(K.balLine, {
+        'name': names[e.key] ?? '?',
+        'amount': formatRm(e.value.owedSen),
+        'sessions': strings.sessions(e.value.unpaidSessions),
+      }),
     );
   }
   return buffer.toString().trimRight();

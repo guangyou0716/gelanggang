@@ -21,6 +21,11 @@ money. It only works out the amounts and writes a message you can paste into Wha
   <img src="docs/part-paid.png" alt="After the split changed, Daniel's row says he paid RM 12.71 and RM 1.49 more is due" width="280">
   <img src="docs/large-text.png" alt="The session screen at twice the text size, with each player's share and buttons on their own line" width="280">
 </p>
+<p>
+  <img src="docs/home-ms.png" alt="The session list in Bahasa Melayu, with dates like Khamis, 26 Nov 2026" width="280">
+  <img src="docs/session-ms.png" alt="A session in Bahasa Melayu: Gelanggang, Bulu tangkis, Jumlah, Kos gelanggang, Sama rata / Ikut masa / Ikut perlawanan" width="280">
+  <img src="docs/message-zh.png" alt="The group message in Simplified Chinese: 羽毛球 2026年11月26日（周四）, 场地按在场时间分摊…" width="280">
+</p>
 
 ## What it does
 
@@ -45,8 +50,9 @@ money. It only works out the amounts and writes a message you can paste into Wha
 - **Paid amounts**: ticking *Paid* records the share at that moment. If the share goes up later (a late
   arrival changes the split, more shuttles), the row says "Paid RM 12.71; share went up, RM 1.49 more due" and
   the difference is still owed everywhere (to collect, balances, reminders). If it goes down, the row shows how
-  much to give back. Tick *Paid* again to record the new amount in full. Payments recorded by older versions
-  count as paid in full.
+  much to give back. Tick *Paid* again to record the new amount in full, or choose *Mark as not paid* in the
+  row's ⋮ menu to set any paid share (part-paid included) straight back to unpaid. Payments recorded by older
+  versions count as paid in full.
 - **Balances carried over**: unpaid shares from earlier sessions are shown on each player's row and added to
   their line in the message ("RM 12.86 + RM 9.66 from earlier sessions = RM 22.52").
 - **History**: the Players screen shows each player's sessions, games and what they owe across all sessions,
@@ -74,7 +80,30 @@ money. It only works out the amounts and writes a message you can paste into Wha
 - Data is saved on the device (`shared_preferences`, which is local storage on the web). The first launch adds a
   synthetic demo group so you can try it straight away (only on a real first launch, never over saved data).
 
-Planned next: Bahasa Melayu and 简体中文. See the roadmap below.
+- **Languages**: English, Bahasa Melayu and 简体中文 (see below).
+
+## Languages
+
+<img src="docs/language.png" alt="The language menu: Same as this device, English, Bahasa Melayu, 简体中文" width="240" align="right">
+
+- The whole app is translated: every screen, dialog, button, screen-reader label and error message, and the
+  two messages you paste into the group chat (the settle-up message and the balances reminder). Material's
+  own texts (back button, menus, text editing) follow too.
+- By default the app follows the device language: Malay (`ms`) and Chinese (`zh`) devices get Bahasa Melayu
+  and 简体中文, anything else gets English. Pick a language with the 文A button on the home screen to override
+  it; the choice is kept on the device (apart from your data, so a backup or restore never changes it), and
+  *Same as this device* goes back to following the device.
+- Money is shown as `RM 1,234.50` in every language, as it is written in Malaysia. Dates: English keeps the
+  ISO date (`2026-11-26`); Bahasa Melayu shows `Khamis, 26 Nov 2026` and Chinese `2026年11月26日（周四）`.
+  Times are 24-hour (`20:00`) everywhere. Names and venues you type are never translated.
+- Texts live in `lib/src/l10n/`: each key carries its English text in `strings.dart`, with the translations in
+  `ms.dart` and `zh.dart`. Tests check that every key is translated in every language with exactly the same
+  `{placeholders}`, that every key is used and every key used exists, and they render every screen in Malay
+  and Chinese (no English left, accessibility guidelines, twice the text size).
+- The translations were written for this project and have not yet been reviewed by native speakers;
+  corrections are welcome.
+
+<br clear="right">
 
 ## Run it
 
@@ -114,7 +143,8 @@ Built and tested with Flutter 3.50 (Dart 3.14).
   shares going up and down after paying, settle all, carried-over balances and damaged amounts. Accessibility
   tests run Material's tap target, label and contrast guidelines on every screen, activate a control through
   the semantics tree, and check every screen at twice the text size for overflow and squeezed text. Key
-  checks are mutation-tested (each was broken on purpose and a test failed).
+  checks are mutation-tested (each was broken on purpose and a test failed). Language tests are described
+  under [Languages](#languages).
 - GitHub Actions runs `dart format`, `flutter analyze`, `flutter test --coverage` and `flutter build web` on
   every push and pull request.
 
@@ -124,7 +154,8 @@ Built and tested with Flutter 3.50 (Dart 3.14).
 2. ✅ Court queue and game log with a fair "next four" suggestion (deterministic, with property tests).
 3. ✅ Split by games, separate court/shuttle modes, guest fee, balances carried over, player history.
 4. ✅ Backup/restore, unreadable data set aside, paid amounts, accessibility pass.
-5. Bahasa Melayu and 简体中文 (UI and the group messages), then device integration tests.
+5. ✅ Bahasa Melayu and 简体中文 (whole UI and the group messages), language picker, one-step "not paid".
+6. Device integration tests (`integration_test`), then levels and singles in the queue.
 
 ## Privacy
 

@@ -5,8 +5,8 @@ import '../domain/costs.dart';
 import '../domain/history.dart';
 import '../domain/money.dart';
 import '../domain/queue.dart';
+import '../l10n/language.dart';
 import 'common.dart';
-import 'queue_screen.dart';
 import 'session_screen.dart';
 
 /// One player's history: sessions, games, what they still owe.
@@ -18,6 +18,7 @@ class PlayerScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.s;
     return ListenableBuilder(
       listenable: store,
       builder: (context, _) {
@@ -25,7 +26,7 @@ class PlayerScreen extends StatelessWidget {
         if (player == null) {
           return Scaffold(
             appBar: AppBar(),
-            body: const Center(child: Text('This player was removed.')),
+            body: Center(child: Text(t(K.playerRemoved))),
           );
         }
         final record = playerRecords(store.sessions)[playerId];
@@ -47,20 +48,17 @@ class PlayerScreen extends StatelessWidget {
                   spacing: 24,
                   runSpacing: 8,
                   children: [
-                    _Stat('Sessions', '${record?.sessions ?? 0}'),
-                    _Stat('Games', '${record?.games ?? 0}'),
-                    _Stat('Wins', '${record?.wins ?? 0}'),
-                    _Stat('Owes', formatRm(owed)),
+                    _Stat(t(K.statSessions), '${record?.sessions ?? 0}'),
+                    _Stat(t(K.statGames), '${record?.games ?? 0}'),
+                    _Stat(t(K.statWins), '${record?.wins ?? 0}'),
+                    _Stat(t(K.statOwes), formatRm(owed)),
                   ],
                 ),
               ),
               SwitchListTile(
                 key: const Key('player-guest'),
-                title: const Text('Guest'),
-                subtitle: const Text(
-                  'New check-ins count as a guest. Past sessions stay as they '
-                  'were.',
-                ),
+                title: Text(t(K.guest)),
+                subtitle: Text(t(K.guestSwitchBody)),
                 value: player.guest,
                 onChanged: (v) => store.setPlayerGuest(playerId, v),
               ),
@@ -70,27 +68,30 @@ class PlayerScreen extends StatelessWidget {
                   child: FilledButton.icon(
                     key: const Key('settle-all'),
                     icon: const Icon(Icons.done_all),
-                    label: Text('Mark ${formatRm(owed)} as paid'),
+                    label: Text(
+                      t(K.markAmountPaid, {'amount': formatRm(owed)}),
+                    ),
                     onPressed: () async {
                       final sure = await showDialog<bool>(
                         context: context,
                         builder: (context) => AlertDialog(
                           title: Text(
-                            'Mark all of ${player.name}\'s sessions as paid?',
+                            t(K.settleAllTitle, {'name': player.name}),
                           ),
                           content: Text(
-                            '${formatRm(owed)} over '
-                            '${record!.unpaidSessions} session'
-                            '${record.unpaidSessions == 1 ? '' : 's'}.',
+                            t(K.settleAllBody, {
+                              'amount': formatRm(owed),
+                              'sessions': t.sessions(record!.unpaidSessions),
+                            }),
                           ),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(context, false),
-                              child: const Text('Cancel'),
+                              child: Text(t(K.cancel)),
                             ),
                             FilledButton(
                               onPressed: () => Navigator.pop(context, true),
-                              child: const Text('Mark paid'),
+                              child: Text(t(K.markPaid)),
                             ),
                           ],
                         ),
@@ -103,12 +104,12 @@ class PlayerScreen extends StatelessWidget {
                 ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                child: Text('History', style: text.titleSmall),
+                child: Text(t(K.history), style: text.titleSmall),
               ),
               if (sessions.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('Not at any session yet.'),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(t(K.notAtAnySession)),
                 ),
               for (final s in sessions)
                 Builder(
@@ -123,21 +124,31 @@ class PlayerScreen extends StatelessWidget {
                     // title, so neither gets squeezed (long part-paid text,
                     // large text sizes).
                     return ListTile(
-                      title: Text('${s.date} · ${s.venue}'),
+                      title: Text(
+                        t(K.sessionListTitle, {
+                          'date': t.date(s.date),
+                          'venue': s.venue,
+                        }),
+                      ),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '${gamesLabel(games)}${a.guest ? ' · guest' : ''}',
+                            a.guest
+                                ? t(K.historyGuest, {'games': t.games(games)})
+                                : t.games(games),
                           ),
                           Text(
                             share == 0
                                 ? formatRm(0)
                                 : due == 0
-                                ? '${formatRm(share)} paid'
+                                ? t(K.sharePaid, {'amount': formatRm(share)})
                                 : due < share
-                                ? '${formatRm(due)} of ${formatRm(share)} owed'
-                                : '${formatRm(share)} owed',
+                                ? t(K.dueOfShare, {
+                                    'due': formatRm(due),
+                                    'share': formatRm(share),
+                                  })
+                                : t(K.shareOwed, {'amount': formatRm(share)}),
                             style: due == 0
                                 ? null
                                 : TextStyle(

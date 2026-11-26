@@ -1,3 +1,4 @@
+import '../l10n/strings.dart';
 import 'models.dart';
 import 'money.dart';
 import 'queue.dart';
@@ -164,14 +165,14 @@ int? parseClock(String input) {
   return h * 60 + m;
 }
 
-String _modeText(SplitMode m) => switch (m) {
-  SplitMode.equal => 'equally',
-  SplitMode.byMinutes => 'by time played',
-  SplitMode.byGames => 'by games played',
+K _modeText(SplitMode m) => switch (m) {
+  SplitMode.equal => K.modeEqually,
+  SplitMode.byMinutes => K.modeByTime,
+  SplitMode.byGames => K.modeByGames,
 };
 
-/// A message the organiser can paste into the group chat. Nothing is sent by
-/// the app, and no payment links are made.
+/// A message the organiser can paste into the group chat, in [strings]'
+/// language. Nothing is sent by the app, and no payment links are made.
 ///
 /// [earlierSen] is what each player still owes from earlier sessions (see
 /// `carriedOver` in history.dart); it is added to their line.
@@ -179,52 +180,77 @@ String settleUpText(
   Session s,
   Map<int, String> names, {
   Map<int, int> earlierSen = const {},
+  Strings strings = Strings.en,
 }) {
+  final t = strings;
   final shares = sharesFor(s);
   final buffer = StringBuffer()
     ..writeln(
-      'Badminton ${s.date} ${formatClock(s.startMinute)}-${formatClock(s.endMinute)}, ${s.venue}',
+      t(K.msgHeader, {
+        'date': t.date(s.date),
+        'start': formatClock(s.startMinute),
+        'end': formatClock(s.endMinute),
+        'venue': s.venue,
+      }),
     )
     ..writeln(
-      'Courts ${formatRm(courtCostSen(s))} + shuttles ${formatRm(shuttleCostSen(s))} = ${formatRm(totalCostSen(s))}',
+      t(K.msgCosts, {
+        'courts': formatRm(courtCostSen(s)),
+        'shuttles': formatRm(shuttleCostSen(s)),
+        'total': formatRm(totalCostSen(s)),
+      }),
     );
   if (guestFeesCoverAll(s)) {
-    buffer.writeln('Guests share the whole cost.');
+    buffer.writeln(t(K.msgGuestsShareAll));
   } else if (guestFeeApplies(s)) {
-    buffer.writeln('Guests pay a flat ${formatRm(s.guestFeeSen)}.');
+    buffer.writeln(t(K.msgGuestsFlat, {'amount': formatRm(s.guestFeeSen)}));
   }
   buffer.writeln(
     s.courtSplit == s.shuttleSplit
-        ? 'Split ${_modeText(s.courtSplit)}:'
-        : 'Courts split ${_modeText(s.courtSplit)}, '
-              'shuttles ${_modeText(s.shuttleSplit)}:',
+        ? t(K.msgSplit, {'mode': _modeText(s.courtSplit)})
+        : t(K.msgSplitEach, {
+            'court': _modeText(s.courtSplit),
+            'shuttle': _modeText(s.shuttleSplit),
+          }),
   );
   for (final a in s.attendance) {
     final share = shares[a.playerId] ?? 0;
     final earlier = earlierSen[a.playerId] ?? 0;
-    final guest = a.guest ? ' (guest)' : '';
     final due = dueSen(a, share);
     final over = overpaidSen(a, share);
+    final money = {
+      'share': formatRm(share),
+      'earlier': formatRm(earlier),
+      'due': formatRm(due),
+      'over': formatRm(over),
+      if (a.paidSen != null) 'paid': formatRm(a.paidSen!),
+    };
     final String amount;
     if (a.paid && due > 0) {
-      final total = due + earlier;
-      amount =
-          '${formatRm(share)} (paid ${formatRm(a.paidSen!)}, '
-          '${formatRm(due)} more'
-          '${earlier > 0 ? ' + ${formatRm(earlier)} from earlier sessions = ${formatRm(total)}' : ''})';
+      amount = earlier > 0
+          ? t(K.msgPartPaidEarlier, {
+              ...money,
+              'total': formatRm(due + earlier),
+            })
+          : t(K.msgPartPaid, money);
     } else if (a.paid) {
       amount =
-          '${formatRm(share)} (paid, thanks!'
-          '${over > 0 ? ' ${formatRm(over)} to give back' : ''})'
-          '${earlier > 0 ? ' · ${formatRm(earlier)} still owed from earlier sessions' : ''}';
+          t(over > 0 ? K.msgPaidGiveBack : K.msgPaidThanks, money) +
+          (earlier > 0 ? t(K.msgStillOwedEarlier, money) : '');
     } else if (earlier > 0) {
-      amount =
-          '${formatRm(share)} + ${formatRm(earlier)} from earlier sessions '
-          '= ${formatRm(share + earlier)}';
+      amount = t(K.msgWithEarlier, {
+        ...money,
+        'total': formatRm(share + earlier),
+      });
     } else {
       amount = formatRm(share);
     }
-    buffer.writeln('- ${names[a.playerId] ?? '?'}$guest: $amount');
+    buffer.writeln(
+      t(a.guest ? K.msgLineGuest : K.msgLine, {
+        'name': names[a.playerId] ?? '?',
+        'amount': amount,
+      }),
+    );
   }
   return buffer.toString().trimRight();
 }

@@ -5,6 +5,7 @@ import '../data/store.dart';
 import '../domain/costs.dart';
 import '../domain/models.dart';
 import '../domain/money.dart';
+import '../l10n/language.dart';
 import 'common.dart';
 
 /// Creates a session, or edits one when [sessionId] is given. Pops with the
@@ -59,15 +60,16 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
   }
 
   String? _required(String? v) =>
-      (v == null || v.trim().isEmpty) ? 'Required' : null;
-  String? _clock(String? v) =>
-      parseClock(v ?? '') == null ? 'Use HH:MM, like 20:00' : null;
+      (v == null || v.trim().isEmpty) ? context.s(K.required) : null;
+  String? _clock(String? v) => parseClock(v ?? '') == null
+      ? context.s(K.useClock, {'example': '20:00'})
+      : null;
   String? _money(String? v) =>
-      parseRm(v ?? '') == null ? 'Enter an amount like 20 or 4.50' : null;
+      parseRm(v ?? '') == null ? context.s(K.amountHint) : null;
   String? _count(String? v, int min, int max) {
     final n = int.tryParse((v ?? '').trim());
     return (n == null || n < min || n > max)
-        ? 'Enter a number from $min to $max'
+        ? context.s(K.numberRange, {'min': min, 'max': max})
         : null;
   }
 
@@ -155,25 +157,26 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
   @override
   Widget build(BuildContext context) {
     final editing = widget.sessionId != null;
+    final t = context.s;
     return Scaffold(
-      appBar: AppBar(title: Text(editing ? 'Edit session' : 'New session')),
+      appBar: AppBar(title: Text(t(editing ? K.editSession : K.newSession))),
       body: Form(
         key: _form,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _field('date', 'Date (YYYY-MM-DD)', validator: _required),
+            _field('date', t(K.dateField), validator: _required),
             _field(
               'venue',
-              'Venue',
+              t(K.venue),
               validator: _required,
-              hint: 'e.g. Dewan Badminton Taman Jaya',
+              hint: t(K.venueHint),
             ),
             Row(
               children: [
-                Expanded(child: _field('start', 'Start', validator: _clock)),
+                Expanded(child: _field('start', t(K.start), validator: _clock)),
                 const SizedBox(width: 12),
-                Expanded(child: _field('end', 'End', validator: _clock)),
+                Expanded(child: _field('end', t(K.end), validator: _clock)),
               ],
             ),
             Row(
@@ -181,7 +184,7 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
                 Expanded(
                   child: _field(
                     'courts',
-                    'Courts',
+                    t(K.figCourts),
                     validator: (v) => _count(v, 1, 20),
                     keyboard: TextInputType.number,
                   ),
@@ -190,7 +193,7 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
                 Expanded(
                   child: _field(
                     'rate',
-                    'Court rate (RM/hour)',
+                    t(K.courtRateField),
                     validator: _money,
                     keyboard: const TextInputType.numberWithOptions(
                       decimal: true,
@@ -204,7 +207,7 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
                 Expanded(
                   child: _field(
                     'shuttles',
-                    'Shuttles used',
+                    t(K.shuttlesUsed),
                     validator: (v) => _count(v, 0, 500),
                     keyboard: TextInputType.number,
                   ),
@@ -213,7 +216,7 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
                 Expanded(
                   child: _field(
                     'shuttlePrice',
-                    'Price per shuttle (RM)',
+                    t(K.shuttlePrice),
                     validator: _money,
                     keyboard: const TextInputType.numberWithOptions(
                       decimal: true,
@@ -224,16 +227,16 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
             ),
             _field(
               'guestFee',
-              'Guest fee (RM, 0 = guests share like regulars)',
+              t(K.guestFeeField),
               validator: _money,
               keyboard: const TextInputType.numberWithOptions(decimal: true),
-              hint: 'e.g. 15',
+              hint: t(K.guestFeeHint),
             ),
             const SizedBox(height: 8),
             FilledButton(
               key: const Key('save-session'),
               onPressed: _save,
-              child: Text(editing ? 'Save' : 'Create session'),
+              child: Text(t(editing ? K.save : K.createSession)),
             ),
           ],
         ),

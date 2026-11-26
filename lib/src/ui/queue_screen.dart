@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../data/store.dart';
 import '../domain/models.dart';
 import '../domain/queue.dart';
+import '../l10n/language.dart';
 import 'common.dart';
 
 /// "Who plays next": courts in use, the suggested next four (which the
@@ -43,10 +44,11 @@ class _QueueScreenState extends State<QueueScreen> {
   Future<void> _swap(Session s, List<int> slots, int slot) async {
     final names = store.names;
     final waiting = waitingOrder(s);
+    final t = context.s;
     final picked = await showDialog<int>(
       context: context,
       builder: (context) => SimpleDialog(
-        title: Text('Instead of ${names[slots[slot]]}'),
+        title: Text(t(K.insteadOf, {'name': names[slots[slot]] ?? '?'})),
         children: [
           for (final p in waiting)
             if (p != slots[slot])
@@ -54,7 +56,7 @@ class _QueueScreenState extends State<QueueScreen> {
                 onPressed: () => Navigator.pop(context, p),
                 child: Text(
                   slots.contains(p)
-                      ? '${names[p]} (swap places)'
+                      ? t(K.swapPlaces, {'name': names[p] ?? '?'})
                       : names[p] ?? '?',
                 ),
               ),
@@ -78,7 +80,7 @@ class _QueueScreenState extends State<QueueScreen> {
     final scoreA = a.isEmpty ? null : int.tryParse(a);
     final scoreB = b.isEmpty ? null : int.tryParse(b);
     if ((a.isNotEmpty && scoreA == null) || (b.isNotEmpty && scoreB == null)) {
-      toast(context, 'Scores are whole numbers, like 21');
+      toast(context, context.s(K.scoresWhole));
       return;
     }
     await attempt(
@@ -92,19 +94,20 @@ class _QueueScreenState extends State<QueueScreen> {
     );
   }
 
-  Future<void> _remove(Game g, String what) async {
+  Future<void> _remove(Game g, K what) async {
+    final t = context.s;
     final sure = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(what),
+        title: Text(t(what)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Keep'),
+            child: Text(t(K.keep)),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Remove'),
+            child: Text(t(K.remove)),
           ),
         ],
       ),
@@ -114,6 +117,7 @@ class _QueueScreenState extends State<QueueScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.s;
     return ListenableBuilder(
       listenable: store,
       builder: (context, _) {
@@ -121,7 +125,7 @@ class _QueueScreenState extends State<QueueScreen> {
         if (s == null) {
           return Scaffold(
             appBar: AppBar(),
-            body: const Center(child: Text('This session was deleted.')),
+            body: Center(child: Text(t(K.sessionDeleted))),
           );
         }
         final names = store.names;
@@ -143,7 +147,7 @@ class _QueueScreenState extends State<QueueScreen> {
             if (g.finished) g,
         ];
         return Scaffold(
-          appBar: AppBar(title: const Text('Court queue')),
+          appBar: AppBar(title: Text(t(K.courtQueue))),
           body: ListView(
             padding: const EdgeInsets.only(bottom: 32),
             children: [
@@ -152,21 +156,21 @@ class _QueueScreenState extends State<QueueScreen> {
                   court: c,
                   game: active[c],
                   names: names,
+                  strings: t,
                   onFinish: (g) => _finish(g, names),
-                  onCancel: (g) => _remove(g, 'Take this game off court?'),
+                  onCancel: (g) => _remove(g, K.takeOffCourt),
                 ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                child: Text('Next up', style: text.titleSmall),
+                child: Text(t(K.nextUp), style: text.titleSmall),
               ),
               if (next == null)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
                     s.attendance.length < 4
-                        ? 'Tick at least four players under "Who came" first.'
-                        : 'Waiting for four free players '
-                              '(${waiting.length} free now).',
+                        ? t(K.tickFour)
+                        : t(K.waitingForFour, {'n': waiting.length}),
                   ),
                 )
               else ...[
@@ -179,7 +183,7 @@ class _QueueScreenState extends State<QueueScreen> {
                         if (team == 1)
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 2),
-                            child: Text('vs', style: text.labelLarge),
+                            child: Text(t(K.vs), style: text.labelLarge),
                           ),
                         Wrap(
                           spacing: 8,
@@ -190,7 +194,9 @@ class _QueueScreenState extends State<QueueScreen> {
                                 key: Key('next-$i'),
                                 avatar: const Icon(Icons.swap_horiz, size: 18),
                                 label: Text(names[next[i]] ?? '?'),
-                                tooltip: 'Change ${names[next[i]]}',
+                                tooltip: t(K.changeName, {
+                                  'name': names[next[i]] ?? '?',
+                                }),
                                 onPressed: () => _swap(s, next, i),
                               ),
                           ],
@@ -202,11 +208,11 @@ class _QueueScreenState extends State<QueueScreen> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                   child: free.isEmpty
-                      ? const Text('All courts are busy.')
+                      ? Text(t(K.allCourtsBusy))
                       : FilledButton.icon(
                           key: const Key('start-game'),
                           icon: const Icon(Icons.play_arrow),
-                          label: Text('Start on court ${free.first}'),
+                          label: Text(t(K.startOnCourt, {'court': free.first})),
                           onPressed: () async {
                             final ok = await attempt(
                               context,
@@ -225,7 +231,7 @@ class _QueueScreenState extends State<QueueScreen> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                 child: Text(
-                  'Waiting (${waiting.length})',
+                  t(K.waiting, {'n': waiting.length}),
                   style: text.titleSmall,
                 ),
               ),
@@ -234,47 +240,52 @@ class _QueueScreenState extends State<QueueScreen> {
                   dense: true,
                   leading: CircleAvatar(radius: 14, child: Text('${i + 1}')),
                   title: Text(names[p] ?? '?'),
-                  subtitle: Text(gamesLabel(played[p] ?? 0)),
+                  subtitle: Text(gamesLabel(played[p] ?? 0, t)),
                   trailing: TextButton(
                     onPressed: () => store.setResting(s.id, p, true),
-                    child: const Text('Sit out'),
+                    child: Text(t(K.sitOut)),
                   ),
                 ),
               for (final p in resting)
                 ListTile(
                   dense: true,
                   leading: const Icon(Icons.event_seat_outlined),
-                  title: Text('${names[p] ?? '?'} (sitting out)'),
-                  subtitle: Text(gamesLabel(played[p] ?? 0)),
+                  title: Text(t(K.sittingOut, {'name': names[p] ?? '?'})),
+                  subtitle: Text(gamesLabel(played[p] ?? 0, t)),
                   trailing: TextButton(
                     onPressed: () => store.setResting(s.id, p, false),
-                    child: const Text('Back in'),
+                    child: Text(t(K.backIn)),
                   ),
                 ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                child: Text('Games (${log.length})', style: text.titleSmall),
+                child: Text(
+                  t(K.gamesHeader, {'n': log.length}),
+                  style: text.titleSmall,
+                ),
               ),
               if (log.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Text('Finished games show up here.'),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(t(K.finishedShowHere)),
                 ),
               for (final g in log)
                 ListTile(
                   dense: true,
-                  title: Text(
-                    '${teamName(g.teamA, names)} vs ${teamName(g.teamB, names)}',
-                  ),
+                  title: Text(matchName(g, names, t)),
                   subtitle: Text(
-                    'Court ${g.court}'
-                    '${g.scoreA == null ? '' : ' · ${g.scoreA}-${g.scoreB}'}',
+                    g.scoreA == null
+                        ? t(K.court, {'court': g.court})
+                        : t(K.courtScore, {
+                            'court': g.court,
+                            'a': g.scoreA!,
+                            'b': g.scoreB!,
+                          }),
                   ),
                   trailing: IconButton(
-                    tooltip: 'Remove game',
+                    tooltip: t(K.removeGame),
                     icon: const Icon(Icons.delete_outline),
-                    onPressed: () =>
-                        _remove(g, 'Remove this game from the log?'),
+                    onPressed: () => _remove(g, K.removeGameConfirm),
                   ),
                 ),
             ],
@@ -288,13 +299,18 @@ class _QueueScreenState extends State<QueueScreen> {
 String teamName(List<int> team, Map<int, String> names) =>
     team.map((p) => names[p] ?? '?').join(' & ');
 
-String gamesLabel(int n) => '$n game${n == 1 ? '' : 's'}';
+/// "Aiman & Bee Ling vs Chandran & Daniel".
+String matchName(Game g, Map<int, String> names, [Strings t = Strings.en]) =>
+    t(K.teamVs, {'a': teamName(g.teamA, names), 'b': teamName(g.teamB, names)});
+
+String gamesLabel(int n, [Strings t = Strings.en]) => t.games(n);
 
 class _CourtTile extends StatelessWidget {
   const _CourtTile({
     required this.court,
     required this.game,
     required this.names,
+    required this.strings,
     required this.onFinish,
     required this.onCancel,
   });
@@ -302,35 +318,33 @@ class _CourtTile extends StatelessWidget {
   final int court;
   final Game? game;
   final Map<int, String> names;
+  final Strings strings;
   final ValueChanged<Game> onFinish;
   final ValueChanged<Game> onCancel;
 
   @override
   Widget build(BuildContext context) {
     final g = game;
+    final t = strings;
     return Card.outlined(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: ListTile(
-        title: Text('Court $court'),
-        subtitle: Text(
-          g == null
-              ? 'Free'
-              : '${teamName(g.teamA, names)} vs ${teamName(g.teamB, names)}',
-        ),
+        title: Text(t(K.court, {'court': court})),
+        subtitle: Text(g == null ? t(K.free) : matchName(g, names, t)),
         trailing: g == null
             ? null
             : Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    tooltip: 'Cancel game on court $court',
+                    tooltip: t(K.cancelGameOn, {'court': court}),
                     icon: const Icon(Icons.close),
                     onPressed: () => onCancel(g),
                   ),
                   FilledButton.tonal(
                     key: Key('finish-$court'),
                     onPressed: () => onFinish(g),
-                    child: const Text('Finish'),
+                    child: Text(t(K.finish)),
                   ),
                 ],
               ),
@@ -363,12 +377,13 @@ class _ScoreDialogState extends State<_ScoreDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.s;
     return AlertDialog(
-      title: const Text('Game finished'),
+      title: Text(t(K.gameFinished)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('Score (optional)'),
+          Text(t(K.scoreOptional)),
           TextField(
             key: const Key('score-a'),
             controller: _a,
@@ -386,12 +401,12 @@ class _ScoreDialogState extends State<_ScoreDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(t(K.cancel)),
         ),
         FilledButton(
           key: const Key('save-score'),
           onPressed: () => Navigator.pop(context, (_a.text, _b.text)),
-          child: const Text('Save'),
+          child: Text(t(K.save)),
         ),
       ],
     );

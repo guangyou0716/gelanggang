@@ -7,6 +7,7 @@ import '../domain/history.dart';
 import '../domain/models.dart';
 import '../domain/money.dart';
 import '../domain/queue.dart';
+import '../l10n/language.dart';
 import 'common.dart';
 import 'queue_screen.dart';
 import 'session_form_screen.dart';
@@ -39,7 +40,7 @@ class SessionScreen extends StatelessWidget {
     final arriveAt = parseClock(times.$1);
     final leaveAt = parseClock(times.$2);
     if (arriveAt == null || leaveAt == null) {
-      toast(context, 'Use HH:MM, like 20:30');
+      toast(context, context.s(K.useClock, {'example': '20:30'}));
       return;
     }
     await attempt(
@@ -56,6 +57,7 @@ class SessionScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.s;
     return ListenableBuilder(
       listenable: store,
       builder: (context, _) {
@@ -63,7 +65,7 @@ class SessionScreen extends StatelessWidget {
         if (s == null) {
           return Scaffold(
             appBar: AppBar(),
-            body: const Center(child: Text('This session was deleted.')),
+            body: Center(child: Text(t(K.sessionDeleted))),
           );
         }
         final names = store.names;
@@ -74,10 +76,10 @@ class SessionScreen extends StatelessWidget {
         final text = Theme.of(context).textTheme;
         return Scaffold(
           appBar: AppBar(
-            title: Text(s.date),
+            title: Text(t.date(s.date)),
             actions: [
               IconButton(
-                tooltip: 'Edit session',
+                tooltip: t(K.editSession),
                 icon: const Icon(Icons.edit_outlined),
                 onPressed: () => Navigator.of(context).push<int>(
                   MaterialPageRoute(
@@ -87,21 +89,21 @@ class SessionScreen extends StatelessWidget {
                 ),
               ),
               IconButton(
-                tooltip: 'Delete session',
+                tooltip: t(K.deleteSession),
                 icon: const Icon(Icons.delete_outline),
                 onPressed: () async {
                   final sure = await showDialog<bool>(
                     context: context,
                     builder: (context) => AlertDialog(
-                      title: const Text('Delete this session?'),
+                      title: Text(t(K.deleteSessionConfirm)),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(context, false),
-                          child: const Text('Cancel'),
+                          child: Text(t(K.cancel)),
                         ),
                         FilledButton(
                           onPressed: () => Navigator.pop(context, true),
-                          child: const Text('Delete'),
+                          child: Text(t(K.delete)),
                         ),
                       ],
                     ),
@@ -120,9 +122,18 @@ class SessionScreen extends StatelessWidget {
               ListTile(
                 title: Text(s.venue, style: text.titleMedium),
                 subtitle: Text(
-                  '${formatClock(s.startMinute)}-${formatClock(s.endMinute)} · '
-                  '${s.courts} court${s.courts == 1 ? '' : 's'} at ${formatRm(s.courtRateSen)}/hour · '
-                  '${s.shuttles} shuttle${s.shuttles == 1 ? '' : 's'} at ${formatRm(s.shuttlePriceSen)}',
+                  t(K.sessionSummary, {
+                    'start': formatClock(s.startMinute),
+                    'end': formatClock(s.endMinute),
+                    'courts': t.count(K.courtsOne, K.courtsOther, s.courts),
+                    'rate': formatRm(s.courtRateSen),
+                    'shuttles': t.count(
+                      K.shuttlesOne,
+                      K.shuttlesOther,
+                      s.shuttles,
+                    ),
+                    'price': formatRm(s.shuttlePriceSen),
+                  }),
                 ),
               ),
               Padding(
@@ -131,22 +142,22 @@ class SessionScreen extends StatelessWidget {
                   spacing: 24,
                   runSpacing: 8,
                   children: [
-                    _Figure('Courts', formatRm(courtCostSen(s))),
-                    _Figure('Shuttles', formatRm(shuttleCostSen(s))),
-                    _Figure('Total', formatRm(totalCostSen(s))),
-                    _Figure('To collect', formatRm(owed)),
+                    _Figure(t(K.figCourts), formatRm(courtCostSen(s))),
+                    _Figure(t(K.figShuttles), formatRm(shuttleCostSen(s))),
+                    _Figure(t(K.figTotal), formatRm(totalCostSen(s))),
+                    _Figure(t(K.figToCollect), formatRm(owed)),
                   ],
                 ),
               ),
               _SplitPicker(
-                label: 'Court cost',
+                label: t(K.courtCost),
                 pickerKey: const Key('court-split'),
                 mode: s.courtSplit,
                 onChanged: (mode) =>
                     store.updateSession(s.copyWith(courtSplit: mode)),
               ),
               _SplitPicker(
-                label: 'Shuttles',
+                label: t(K.figShuttles),
                 pickerKey: const Key('shuttle-split'),
                 mode: s.shuttleSplit,
                 onChanged: (mode) =>
@@ -156,14 +167,14 @@ class SessionScreen extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                   child: Text(
-                    guestFeesCoverAll(s)
-                        ? 'The guest fees come to the whole cost, so the '
-                              'guests share it and regulars pay nothing.'
-                        : guestFeeApplies(s)
-                        ? 'Guests pay a flat ${formatRm(s.guestFeeSen)}; '
-                              'regulars share the rest.'
-                        : 'Guest fee ${formatRm(s.guestFeeSen)} applies when '
-                              'guests and regulars both come.',
+                    t(
+                      guestFeesCoverAll(s)
+                          ? K.guestFeesCoverAll
+                          : guestFeeApplies(s)
+                          ? K.guestFeeApplies
+                          : K.guestFeeWhen,
+                      {'amount': formatRm(s.guestFeeSen)},
+                    ),
                     style: text.bodySmall,
                   ),
                 ),
@@ -173,8 +184,10 @@ class SessionScreen extends StatelessWidget {
                   key: const Key('open-queue'),
                   icon: const Icon(Icons.sports_tennis),
                   label: Text(
-                    'Court queue · ${onCourt(s).length} on court · '
-                    '${gamesLabel(s.games.where((g) => g.finished).length)} played',
+                    t(K.queueButton, {
+                      'onCourt': onCourt(s).length,
+                      'games': t.games(s.games.where((g) => g.finished).length),
+                    }),
                   ),
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
@@ -187,14 +200,14 @@ class SessionScreen extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                 child: Text(
-                  'Who came (${s.attendance.length})',
+                  t(K.whoCame, {'n': s.attendance.length}),
                   style: text.titleSmall,
                 ),
               ),
               if (store.players.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('Add players first (Players, top right).'),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(t(K.addPlayersFirst)),
                 ),
               for (final p in store.players)
                 _PlayerRow(
@@ -215,7 +228,7 @@ class SessionScreen extends StatelessWidget {
               if (s.attendance.isNotEmpty) ...[
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                  child: Text('Message for the group', style: text.titleSmall),
+                  child: Text(t(K.messageForGroup), style: text.titleSmall),
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -223,7 +236,7 @@ class SessionScreen extends StatelessWidget {
                     child: Padding(
                       padding: const EdgeInsets.all(12),
                       child: SelectableText(
-                        settleUpText(s, names, earlierSen: earlier),
+                        settleUpText(s, names, earlierSen: earlier, strings: t),
                         key: const Key('settle-text'),
                       ),
                     ),
@@ -235,18 +248,20 @@ class SessionScreen extends StatelessWidget {
                     onPressed: () async {
                       await Clipboard.setData(
                         ClipboardData(
-                          text: settleUpText(s, names, earlierSen: earlier),
+                          text: settleUpText(
+                            s,
+                            names,
+                            earlierSen: earlier,
+                            strings: t,
+                          ),
                         ),
                       );
                       if (context.mounted) {
-                        toast(
-                          context,
-                          'Copied. Paste it into your group chat.',
-                        );
+                        toast(context, t(K.copiedForChat));
                       }
                     },
                     icon: const Icon(Icons.copy),
-                    label: const Text('Copy message'),
+                    label: Text(t(K.copyMessage)),
                   ),
                 ),
               ],
@@ -295,6 +310,7 @@ class _SplitPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.s;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: Column(
@@ -307,15 +323,18 @@ class _SplitPicker extends StatelessWidget {
             child: SegmentedButton<SplitMode>(
               key: pickerKey,
               showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(value: SplitMode.equal, label: Text('Equally')),
+              segments: [
+                ButtonSegment(
+                  value: SplitMode.equal,
+                  label: Text(t(K.splitEqually)),
+                ),
                 ButtonSegment(
                   value: SplitMode.byMinutes,
-                  label: Text('By time'),
+                  label: Text(t(K.splitByTime)),
                 ),
                 ButtonSegment(
                   value: SplitMode.byGames,
-                  label: Text('By games'),
+                  label: Text(t(K.splitByGames)),
                 ),
               ],
               selected: {mode},
@@ -327,6 +346,8 @@ class _SplitPicker extends StatelessWidget {
     );
   }
 }
+
+enum _RowAction { toggleGuest, notPaid }
 
 class _PlayerRow extends StatelessWidget {
   const _PlayerRow({
@@ -355,6 +376,7 @@ class _PlayerRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.s;
     final a = attendance;
     final share = shareSen ?? 0;
     final due = a == null ? 0 : dueSen(a, share);
@@ -372,27 +394,47 @@ class _PlayerRow extends StatelessWidget {
         // A part-paid share shows unticked; ticking it records the new
         // amount in full.
         FilterChip(
-          label: Text('Paid', semanticsLabel: '$name paid'),
+          label: Text(
+            t(K.paid),
+            semanticsLabel: t(K.playerPaid, {'name': name}),
+          ),
           selected: paidInFull,
           onSelected: onPaid,
         ),
-        PopupMenuButton<bool>(
-          tooltip: 'More for $name',
-          onSelected: onGuest,
+        PopupMenuButton<_RowAction>(
+          tooltip: t(K.moreFor, {'name': name}),
+          onSelected: (action) => switch (action) {
+            _RowAction.toggleGuest => onGuest(!a.guest),
+            _RowAction.notPaid => onPaid(false),
+          },
           itemBuilder: (_) => [
             PopupMenuItem(
-              value: !a.guest,
-              child: Text(a.guest ? 'Count as a regular' : 'Count as a guest'),
+              value: _RowAction.toggleGuest,
+              child: Text(t(a.guest ? K.countAsRegular : K.countAsGuest)),
             ),
+            // A part-paid share shows unticked, so this is the one way to
+            // set it straight back to not paid.
+            if (a.paid)
+              PopupMenuItem(
+                key: Key('not-paid-${a.playerId}'),
+                value: _RowAction.notPaid,
+                child: Text(t(K.markNotPaid)),
+              ),
           ],
         ),
       ],
     );
+    final times = a == null
+        ? const <String, Object>{}
+        : {
+            'arrive': formatClock(session.startMinute + a.arriveMinute),
+            'leave': formatClock(session.startMinute + a.leaveMinute),
+          };
     return ListTile(
       leading: Checkbox(
         value: a != null,
         onChanged: (_) => onToggle(),
-        semanticLabel: '$name came',
+        semanticLabel: t(K.playerCame, {'name': name}),
       ),
       title: Text(name),
       subtitle: a == null
@@ -404,10 +446,7 @@ class _PlayerRow extends StatelessWidget {
                   container: true,
                   button: true,
                   onTap: onTimes,
-                  label:
-                      'Change times for $name, '
-                      '${formatClock(session.startMinute + a.arriveMinute)} to '
-                      '${formatClock(session.startMinute + a.leaveMinute)}',
+                  label: t(K.changeTimesFor, {'name': name, ...times}),
                   excludeSemantics: true,
                   child: InkWell(
                     onTap: onTimes,
@@ -416,33 +455,34 @@ class _PlayerRow extends StatelessWidget {
                       child: Align(
                         alignment: AlignmentDirectional.centerStart,
                         widthFactor: 1,
-                        child: Text(
-                          '${formatClock(session.startMinute + a.arriveMinute)}-'
-                          '${formatClock(session.startMinute + a.leaveMinute)} · tap to change',
-                        ),
+                        child: Text(t(K.timesTapToChange, times)),
                       ),
                     ),
                   ),
                 ),
                 if (a.paid && due > 0)
                   Text(
-                    'Paid ${formatRm(a.paidSen!)}; share went up, '
-                    '${formatRm(due)} more due',
+                    t(K.shareWentUp, {
+                      'paid': formatRm(a.paidSen!),
+                      'due': formatRm(due),
+                    }),
                     key: Key('due-${a.playerId}'),
                     style: TextStyle(color: error),
                   ),
                 if (over > 0)
                   Text(
-                    'Paid ${formatRm(a.paidSen!)}; share went down, '
-                    '${formatRm(over)} to give back',
+                    t(K.shareWentDown, {
+                      'paid': formatRm(a.paidSen!),
+                      'over': formatRm(over),
+                    }),
                     key: Key('over-${a.playerId}'),
                   ),
                 if (a.guest || earlierSen > 0)
                   Text(
                     [
-                      if (a.guest) 'Guest',
+                      if (a.guest) t(K.guest),
                       if (earlierSen > 0)
-                        '${formatRm(earlierSen)} owed from earlier',
+                        t(K.owedFromEarlier, {'amount': formatRm(earlierSen)}),
                     ].join(' · '),
                     style: TextStyle(color: earlierSen > 0 ? error : null),
                   ),
@@ -483,31 +523,32 @@ class _TimesDialogState extends State<_TimesDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.s;
     return AlertDialog(
-      title: Text('${widget.name}: time at the court'),
+      title: Text(t(K.timesTitle, {'name': widget.name})),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           TextField(
             key: const Key('arrive'),
             controller: _arrive,
-            decoration: const InputDecoration(labelText: 'Arrived (HH:MM)'),
+            decoration: InputDecoration(labelText: t(K.arrivedLabel)),
           ),
           TextField(
             key: const Key('leave'),
             controller: _leave,
-            decoration: const InputDecoration(labelText: 'Left (HH:MM)'),
+            decoration: InputDecoration(labelText: t(K.leftLabel)),
           ),
         ],
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(t(K.cancel)),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, (_arrive.text, _leave.text)),
-          child: const Text('Save'),
+          child: Text(t(K.save)),
         ),
       ],
     );

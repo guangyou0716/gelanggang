@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../data/store.dart';
+import '../l10n/language.dart';
 import 'common.dart';
 
 /// Copy everything out as text, or put a copied backup back. There is no
@@ -18,7 +19,7 @@ class BackupScreen extends StatefulWidget {
 
 class _BackupScreenState extends State<BackupScreen> {
   final _paste = TextEditingController();
-  String? _error;
+  InputError? _error;
 
   AppStore get store => widget.store;
 
@@ -38,31 +39,33 @@ class _BackupScreenState extends State<BackupScreen> {
     try {
       incoming = AppStore.checkBackup(_paste.text);
     } on InputError catch (e) {
-      setState(() => _error = e.message);
+      setState(() => _error = e);
       return;
     }
     setState(() => _error = null);
     final now = store.summary;
+    final t = context.s;
     final sure = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Replace everything with this backup?'),
+        title: Text(t(K.replaceTitle)),
         content: Text(
-          'The backup has ${_count(incoming.players, 'player')} and '
-          '${_count(incoming.sessions, 'session')}. It replaces the '
-          '${_count(now.players, 'player')} and '
-          '${_count(now.sessions, 'session')} on this phone, which cannot be '
-          'undone. Copy a backup of them first if you may need them.',
+          t(K.replaceBody, {
+            'inPlayers': t.players(incoming.players),
+            'inSessions': t.sessions(incoming.sessions),
+            'nowPlayers': t.players(now.players),
+            'nowSessions': t.sessions(now.sessions),
+          }),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(t(K.cancel)),
           ),
           FilledButton(
             key: const Key('confirm-restore'),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Replace'),
+            child: Text(t(K.replace)),
           ),
         ],
       ),
@@ -71,15 +74,16 @@ class _BackupScreenState extends State<BackupScreen> {
     final ok = await attempt(context, () => store.restoreBackup(_paste.text));
     if (ok && mounted) {
       _paste.clear();
-      toast(context, 'Backup restored.');
+      toast(context, context.s(K.backupRestored));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    final t = context.s;
     return Scaffold(
-      appBar: AppBar(title: const Text('Backup and restore')),
+      appBar: AppBar(title: Text(t(K.backupAndRestore))),
       body: ListenableBuilder(
         listenable: store,
         builder: (context, _) {
@@ -97,44 +101,35 @@ class _BackupScreenState extends State<BackupScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Some saved data could not be read',
-                          style: text.titleSmall,
-                        ),
+                        Text(t(K.unreadableTitle), style: text.titleSmall),
                         const SizedBox(height: 8),
-                        const Text(
-                          'It may be damaged or come from a newer version of '
-                          'the app. It was kept aside, untouched. Copy it and '
-                          'keep it until you have checked it.',
-                        ),
+                        Text(t(K.unreadableBody)),
                         const SizedBox(height: 8),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
                           children: [
                             FilledButton.icon(
-                              onPressed: () => _copy(aside, 'Copied.'),
+                              onPressed: () => _copy(aside, t(K.copied)),
                               icon: const Icon(Icons.copy),
-                              label: const Text('Copy it'),
+                              label: Text(t(K.copyIt)),
                             ),
                             TextButton(
                               onPressed: () async {
                                 final sure = await showDialog<bool>(
                                   context: context,
                                   builder: (context) => AlertDialog(
-                                    title: const Text(
-                                      'Throw away the unreadable data?',
-                                    ),
+                                    title: Text(t(K.throwAwayConfirm)),
                                     actions: [
                                       TextButton(
                                         onPressed: () =>
                                             Navigator.pop(context, false),
-                                        child: const Text('Keep it'),
+                                        child: Text(t(K.keepIt)),
                                       ),
                                       FilledButton(
                                         onPressed: () =>
                                             Navigator.pop(context, true),
-                                        child: const Text('Throw away'),
+                                        child: Text(t(K.throwAway)),
                                       ),
                                     ],
                                   ),
@@ -143,7 +138,7 @@ class _BackupScreenState extends State<BackupScreen> {
                                   await store.discardSetAside();
                                 }
                               },
-                              child: const Text('Throw it away'),
+                              child: Text(t(K.throwItAway)),
                             ),
                           ],
                         ),
@@ -153,33 +148,29 @@ class _BackupScreenState extends State<BackupScreen> {
                 ),
                 const SizedBox(height: 16),
               ],
-              Text('Back up', style: text.titleMedium),
+              Text(t(K.backUp), style: text.titleMedium),
               const SizedBox(height: 8),
               Text(
-                'Everything stays on this phone. Copy a backup now and then '
-                'and keep it somewhere safe, such as a message to yourself. '
-                'This phone has ${_count(now.players, 'player')} and '
-                '${_count(now.sessions, 'session')}.',
+                t(K.backUpBody, {
+                  'players': t.players(now.players),
+                  'sessions': t.sessions(now.sessions),
+                }),
               ),
               const SizedBox(height: 12),
               Align(
                 alignment: AlignmentDirectional.centerStart,
                 child: FilledButton.icon(
                   key: const Key('copy-backup'),
-                  onPressed: () => _copy(
-                    store.exportBackup(),
-                    'Backup copied. Paste it somewhere safe.',
-                  ),
+                  onPressed: () =>
+                      _copy(store.exportBackup(), t(K.backupCopied)),
                   icon: const Icon(Icons.copy),
-                  label: const Text('Copy backup'),
+                  label: Text(t(K.copyBackup)),
                 ),
               ),
               const SizedBox(height: 32),
-              Text('Restore', style: text.titleMedium),
+              Text(t(K.restore), style: text.titleMedium),
               const SizedBox(height: 8),
-              const Text(
-                'Paste a backup to replace everything on this phone with it.',
-              ),
+              Text(t(K.restoreBody)),
               const SizedBox(height: 12),
               TextField(
                 key: const Key('restore-text'),
@@ -187,9 +178,9 @@ class _BackupScreenState extends State<BackupScreen> {
                 minLines: 3,
                 maxLines: 8,
                 decoration: InputDecoration(
-                  labelText: 'Backup text',
+                  labelText: t(K.backupText),
                   border: const OutlineInputBorder(),
-                  errorText: _error,
+                  errorText: _error?.localize(t),
                   errorMaxLines: 4,
                 ),
               ),
@@ -200,7 +191,7 @@ class _BackupScreenState extends State<BackupScreen> {
                   key: const Key('restore'),
                   onPressed: _restore,
                   icon: const Icon(Icons.settings_backup_restore),
-                  label: const Text('Restore'),
+                  label: Text(t(K.restore)),
                 ),
               ),
             ],
@@ -210,5 +201,3 @@ class _BackupScreenState extends State<BackupScreen> {
     );
   }
 }
-
-String _count(int n, String noun) => '$n $noun${n == 1 ? '' : 's'}';
