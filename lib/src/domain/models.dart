@@ -54,6 +54,7 @@ class Attendance {
     required this.arriveMinute,
     required this.leaveMinute,
     this.paid = false,
+    this.paidSen,
     this.resting = false,
     this.guest = false,
   });
@@ -62,6 +63,11 @@ class Attendance {
   final int arriveMinute;
   final int leaveMinute;
   final bool paid;
+
+  /// What was handed over when [paid] was ticked: the share at that moment.
+  /// Null for payments recorded before amounts were kept (those count as
+  /// paid in full) and whenever [paid] is false.
+  final int? paidSen;
 
   /// Sitting out: still counted for the cost split, but not suggested for the
   /// next game.
@@ -74,10 +80,13 @@ class Attendance {
 
   int get minutes => leaveMinute - arriveMinute;
 
+  /// Changing [paid] without a [paidSen] forgets the recorded amount (use
+  /// `AppStore.setPaid` to record one).
   Attendance copyWith({
     int? arriveMinute,
     int? leaveMinute,
     bool? paid,
+    int? paidSen,
     bool? resting,
     bool? guest,
   }) => Attendance(
@@ -85,6 +94,9 @@ class Attendance {
     arriveMinute: arriveMinute ?? this.arriveMinute,
     leaveMinute: leaveMinute ?? this.leaveMinute,
     paid: paid ?? this.paid,
+    paidSen: (paid ?? this.paid)
+        ? paidSen ?? (paid == null ? this.paidSen : null)
+        : null,
     resting: resting ?? this.resting,
     guest: guest ?? this.guest,
   );
@@ -94,18 +106,27 @@ class Attendance {
     'arrive': arriveMinute,
     'leave': leaveMinute,
     'paid': paid,
+    if (paid && paidSen != null) 'paidSen': paidSen,
     if (resting) 'resting': true,
     if (guest) 'guest': true,
   };
 
-  static Attendance fromJson(Map<String, Object?> json) => Attendance(
-    playerId: json['playerId']! as int,
-    arriveMinute: json['arrive']! as int,
-    leaveMinute: json['leave']! as int,
-    paid: json['paid'] as bool? ?? false,
-    resting: json['resting'] as bool? ?? false,
-    guest: json['guest'] as bool? ?? false,
-  );
+  static Attendance fromJson(Map<String, Object?> json) {
+    final paid = json['paid'] as bool? ?? false;
+    final paidSen = json['paidSen'] as int?;
+    if (paidSen != null && paidSen < 0) {
+      throw const FormatException('A payment cannot be negative');
+    }
+    return Attendance(
+      playerId: json['playerId']! as int,
+      arriveMinute: json['arrive']! as int,
+      leaveMinute: json['leave']! as int,
+      paid: paid,
+      paidSen: paid ? paidSen : null,
+      resting: json['resting'] as bool? ?? false,
+      guest: json['guest'] as bool? ?? false,
+    );
+  }
 }
 
 /// One evening (or morning) of badminton.

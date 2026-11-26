@@ -81,22 +81,27 @@ class _RosterScreenState extends State<RosterScreen> {
                         ? '${formatRm(toCollect)} to collect across sessions'
                         : 'Everyone is paid up',
                   ),
-                  trailing: reminder == null
+                  // Under the total rather than beside it, so it still fits
+                  // with large text.
+                  subtitle: reminder == null
                       ? null
-                      : TextButton.icon(
-                          onPressed: () async {
-                            await Clipboard.setData(
-                              ClipboardData(text: reminder),
-                            );
-                            if (context.mounted) {
-                              toast(
-                                context,
-                                'Copied. Paste it into your group chat.',
+                      : Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: TextButton.icon(
+                            onPressed: () async {
+                              await Clipboard.setData(
+                                ClipboardData(text: reminder),
                               );
-                            }
-                          },
-                          icon: const Icon(Icons.copy),
-                          label: const Text('Copy reminder'),
+                              if (context.mounted) {
+                                toast(
+                                  context,
+                                  'Copied. Paste it into your group chat.',
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.copy),
+                            label: const Text('Copy reminder'),
+                          ),
                         ),
                 ),
               for (final p in store.players)

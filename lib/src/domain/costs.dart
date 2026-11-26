@@ -119,12 +119,32 @@ Map<int, int> sharesFor(Session s) => {
   for (final e in shareBreakdown(s).entries) e.key: e.value.totalSen,
 };
 
-/// Total still owed for [s] by players not marked paid.
+/// What [a] still owes towards a [shareSen] share: all of it when not paid,
+/// nothing when paid before amounts were recorded, otherwise whatever the
+/// share has grown by since they paid (a late arrival who changed the split,
+/// more shuttles, ...).
+int dueSen(Attendance a, int shareSen) {
+  if (!a.paid) return shareSen;
+  final paid = a.paidSen;
+  if (paid == null || paid >= shareSen) return 0;
+  return shareSen - paid;
+}
+
+/// What [a] paid beyond a [shareSen] share that has since shrunk; the
+/// organiser may want to give it back.
+int overpaidSen(Attendance a, int shareSen) {
+  final paid = a.paidSen;
+  if (!a.paid || paid == null || paid <= shareSen) return 0;
+  return paid - shareSen;
+}
+
+/// Total still owed for [s] (see [dueSen]).
 int outstandingSen(Session s) {
   final shares = sharesFor(s);
-  return s.attendance
-      .where((a) => !a.paid)
-      .fold(0, (sum, a) => sum + (shares[a.playerId] ?? 0));
+  return s.attendance.fold(
+    0,
+    (sum, a) => sum + dueSen(a, shares[a.playerId] ?? 0),
+  );
 }
 
 /// "20:00" for 1200.
@@ -183,10 +203,19 @@ String settleUpText(
     final share = shares[a.playerId] ?? 0;
     final earlier = earlierSen[a.playerId] ?? 0;
     final guest = a.guest ? ' (guest)' : '';
+    final due = dueSen(a, share);
+    final over = overpaidSen(a, share);
     final String amount;
-    if (a.paid) {
+    if (a.paid && due > 0) {
+      final total = due + earlier;
       amount =
-          '${formatRm(share)} (paid, thanks!)'
+          '${formatRm(share)} (paid ${formatRm(a.paidSen!)}, '
+          '${formatRm(due)} more'
+          '${earlier > 0 ? ' + ${formatRm(earlier)} from earlier sessions = ${formatRm(total)}' : ''})';
+    } else if (a.paid) {
+      amount =
+          '${formatRm(share)} (paid, thanks!'
+          '${over > 0 ? ' ${formatRm(over)} to give back' : ''})'
           '${earlier > 0 ? ' · ${formatRm(earlier)} still owed from earlier sessions' : ''}';
     } else if (earlier > 0) {
       amount =

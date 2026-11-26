@@ -15,6 +15,11 @@ money. It only works out the amounts and writes a message you can paste into Wha
 <p>
   <img src="docs/players.png" alt="Players with sessions, games and what each still owes across sessions" width="280">
   <img src="docs/player.png" alt="One player's history with a button to mark everything paid" width="280">
+  <img src="docs/backup.png" alt="Backup and restore: copy a backup as text, or paste one to restore" width="280">
+</p>
+<p>
+  <img src="docs/part-paid.png" alt="After the split changed, Daniel's row says he paid RM 12.71 and RM 1.49 more is due" width="280">
+  <img src="docs/large-text.png" alt="The session screen at twice the text size, with each player's share and buttons on their own line" width="280">
 </p>
 
 ## What it does
@@ -37,6 +42,11 @@ money. It only works out the amounts and writes a message you can paste into Wha
     and the regulars pay nothing. A player can be switched between guest and regular for one session.
 - **Settle up**: mark who has paid, see what is left to collect, and copy a ready-made message for the group.
   There are no payment links and no wallet; pay each other however you like.
+- **Paid amounts**: ticking *Paid* records the share at that moment. If the share goes up later (a late
+  arrival changes the split, more shuttles), the row says "Paid RM 12.71; share went up, RM 1.49 more due" and
+  the difference is still owed everywhere (to collect, balances, reminders). If it goes down, the row shows how
+  much to give back. Tick *Paid* again to record the new amount in full. Payments recorded by older versions
+  count as paid in full.
 - **Balances carried over**: unpaid shares from earlier sessions are shown on each player's row and added to
   their line in the message ("RM 12.86 + RM 9.66 from earlier sessions = RM 22.52").
 - **History**: the Players screen shows each player's sessions, games and what they owe across all sessions,
@@ -50,10 +60,21 @@ money. It only works out the amounts and writes a message you can paste into Wha
   - The suggestion is deterministic. Tap a name to swap in someone else, mark a player as sitting out (they
     still share the cost), take a game off court, or remove a wrong log entry.
   - The queue does not watch the clock: when someone leaves early, mark them as sitting out.
+- **Backup and restore**: copy everything as readable JSON text (keep it in a message to yourself or a notes
+  app) and paste it on another phone to restore. A backup is checked as a whole before anything is replaced:
+  it must be complete, from this or an older version, with no repeated ids or names, every player in a session
+  on the roster, and every session passing the same rules as the app's own forms. You see what it holds and
+  what it replaces before you confirm. No files, cloud or extra permissions are needed.
+- **Unreadable data is kept, not lost**: if the saved data cannot be read (damaged, or from a newer version
+  of the app), it is set aside untouched before anything new is saved. A badge on the backup button leads to
+  a card where you can copy it out, or throw it away.
+- **Accessibility**: icon buttons have labels, per-row controls name the player ("Aiman paid", "Change times
+  for Aiman, 20:00 to 22:00"), figures read as one item ("Total RM 107.00"), tap targets are at least 48 px,
+  and with large text each player's share and buttons move onto their own line instead of squeezing the name.
 - Data is saved on the device (`shared_preferences`, which is local storage on the web). The first launch adds a
-  synthetic demo group so you can try it straight away.
+  synthetic demo group so you can try it straight away (only on a real first launch, never over saved data).
 
-Planned next: BM/中文 translations, an accessibility pass and JSON backup/restore. See the roadmap below.
+Planned next: Bahasa Melayu and 简体中文. See the roadmap below.
 
 ## Run it
 
@@ -70,7 +91,7 @@ Built and tested with Flutter 3.50 (Dart 3.14).
 
 - Flutter with Material widgets (`material_ui`), and state in a single `ChangeNotifier` store
   (`lib/src/data/store.dart`). Every change is saved as one versioned JSON document. Unreadable or
-  newer-version data is ignored instead of crashing the app.
+  newer-version data is set aside instead of crashing the app or being overwritten.
 - Pure Dart domain code in `lib/src/domain`: money parsing and formatting in sen, the largest-remainder split,
   costs, the settle-up message and the court queue. It is tested on its own, including a randomised test (2,000
   runs) checking that shares always add up and never differ from the exact share by a sen or more.
@@ -87,6 +108,13 @@ Built and tested with Flutter 3.50 (Dart 3.14).
   and fees): shares always add up to the total, nobody goes below zero and a guest never pays more than the
   fee. Saved data from before this version (one split mode, no guests) still loads, and damaged fees or guest
   flags are ignored without overwriting what is saved.
+- Backup tests restore the demo group on a fresh store and compare it byte for byte, survive a restart, and
+  refuse 26 kinds of bad backup (cut off, wrong types, newer version, unknown players, repeated ids, invalid
+  sessions, games and scores) each with its own message and without changing anything. Paid-amount tests cover
+  shares going up and down after paying, settle all, carried-over balances and damaged amounts. Accessibility
+  tests run Material's tap target, label and contrast guidelines on every screen, activate a control through
+  the semantics tree, and check every screen at twice the text size for overflow and squeezed text. Key
+  checks are mutation-tested (each was broken on purpose and a test failed).
 - GitHub Actions runs `dart format`, `flutter analyze`, `flutter test --coverage` and `flutter build web` on
   every push and pull request.
 
@@ -95,7 +123,8 @@ Built and tested with Flutter 3.50 (Dart 3.14).
 1. ✅ Roster, sessions, attendance, equal / by-time split, settle-up message, local storage, CI.
 2. ✅ Court queue and game log with a fair "next four" suggestion (deterministic, with property tests).
 3. ✅ Split by games, separate court/shuttle modes, guest fee, balances carried over, player history.
-4. Bahasa Melayu and 简体中文, accessibility pass, JSON backup/restore, integration tests.
+4. ✅ Backup/restore, unreadable data set aside, paid amounts, accessibility pass.
+5. Bahasa Melayu and 简体中文 (UI and the group messages), then device integration tests.
 
 ## Privacy
 

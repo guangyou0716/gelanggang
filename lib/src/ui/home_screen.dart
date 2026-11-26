@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../data/store.dart';
 import '../domain/costs.dart';
 import '../domain/money.dart';
+import 'backup_screen.dart';
 import 'roster_screen.dart';
 import 'session_form_screen.dart';
 import 'session_screen.dart';
@@ -28,6 +29,18 @@ class HomeScreen extends StatelessWidget {
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) => RosterScreen(store: store),
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Backup and restore',
+                icon: Badge(
+                  isLabelVisible: store.setAside != null,
+                  child: const Icon(Icons.settings_backup_restore),
+                ),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => BackupScreen(store: store),
                   ),
                 ),
               ),
