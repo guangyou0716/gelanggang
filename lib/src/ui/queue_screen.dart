@@ -6,8 +6,9 @@ import '../domain/queue.dart';
 import '../l10n/language.dart';
 import 'common.dart';
 
-/// "Who plays next": courts in use, the suggested next four (which the
-/// organiser can change), the waiting list and the game log.
+/// "Who plays next": courts in use, the suggested next game (doubles or
+/// singles, which the organiser can change), the waiting list and the game
+/// log.
 class QueueScreen extends StatefulWidget {
   const QueueScreen({super.key, required this.store, required this.sessionId});
 
@@ -19,18 +20,20 @@ class QueueScreen extends StatefulWidget {
 }
 
 class _QueueScreenState extends State<QueueScreen> {
-  /// The organiser's changes to the suggestion: slot index (0-1 team A,
-  /// 2-3 team B) to player. Dropped when that player is no longer free.
+  /// The organiser's changes to the suggestion: slot index (team A first,
+  /// then team B) to player. Dropped when that player is no longer free.
   final Map<int, int> _swaps = {};
 
   AppStore get store => widget.store;
 
-  List<int>? _nextFour(Session s) {
-    final suggestion = suggestNext(s);
+  List<int>? _nextGame(Session s) {
+    final suggestion = suggestNext(s, levels: store.levels);
     if (suggestion == null) return null;
     final slots = [...suggestion.teamA, ...suggestion.teamB];
     final waiting = waitingOrder(s).toSet();
-    _swaps.removeWhere((_, p) => !waiting.contains(p));
+    _swaps.removeWhere(
+      (slot, p) => slot >= slots.length || !waiting.contains(p),
+    );
     // Apply each swap: the chosen player takes the slot, and if they were
     // already in another slot the two trade places.
     for (final MapEntry(key: slot, value: p) in _swaps.entries) {
@@ -135,7 +138,11 @@ class _QueueScreenState extends State<QueueScreen> {
             if (!g.finished) g.court: g,
         };
         final free = freeCourts(s);
-        final next = _nextFour(s);
+        final court = nextCourt(s);
+        final singles = s.isSingles(court);
+        final next = _nextGame(s);
+        final half = singles ? 1 : 2;
+        final levels = store.levels;
         final waiting = waitingOrder(s);
         final played = gamesPlayed(s);
         final resting = [
@@ -154,6 +161,7 @@ class _QueueScreenState extends State<QueueScreen> {
               for (var c = 1; c <= s.courts; c++)
                 _CourtTile(
                   court: c,
+                  singles: s.isSingles(c),
                   game: active[c],
                   names: names,
                   strings: t,
@@ -161,16 +169,57 @@ class _QueueScreenState extends State<QueueScreen> {
                   onCancel: (g) => _remove(g, K.takeOffCourt),
                 ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                child: Text(t(K.nextUp), style: text.titleSmall),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 4,
+                  children: [
+                    Text(t(K.nextUp), style: text.titleSmall),
+                    // Applies to the court the suggestion is for (the one on
+                    // the start button).
+                    Semantics(
+                      label: t(K.gameTypeOn, {'court': court}),
+                      container: true,
+                      child: SegmentedButton<bool>(
+                        key: const Key('game-type'),
+                        showSelectedIcon: false,
+                        segments: [
+                          ButtonSegment(
+                            value: false,
+                            label: Text(
+                              t(K.doubles),
+                              key: const Key('type-doubles'),
+                            ),
+                          ),
+                          ButtonSegment(
+                            value: true,
+                            label: Text(
+                              t(K.singles),
+                              key: const Key('type-singles'),
+                            ),
+                          ),
+                        ],
+                        selected: {singles},
+                        onSelectionChanged: (v) async {
+                          setState(_swaps.clear);
+                          await store.setCourtSingles(s.id, court, v.first);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               ),
               if (next == null)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
-                    s.attendance.length < 4
-                        ? t(K.tickFour)
-                        : t(K.waitingForFour, {'n': waiting.length}),
+                    s.attendance.length < half * 2
+                        ? t(singles ? K.tickTwo : K.tickFour)
+                        : t(singles ? K.waitingForTwo : K.waitingForFour, {
+                            'n': waiting.length,
+                          }),
                   ),
                 )
               else ...[
@@ -183,13 +232,39 @@ class _QueueScreenState extends State<QueueScreen> {
                         if (team == 1)
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 2),
-                            child: Text(t(K.vs), style: text.labelLarge),
+                            child: Wrap(
+                              spacing: 16,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text(t(K.vs), style: text.labelLarge),
+                                // Team level sums, when everyone has a level.
+                                if (next.every((p) => levels[p] != null))
+                                  Text(
+                                    t(K.levelTotals, {
+                                      'a': _levelSum(
+                                        next.sublist(0, half),
+                                        levels,
+                                      ),
+                                      'b': _levelSum(
+                                        next.sublist(half),
+                                        levels,
+                                      ),
+                                    }),
+                                    key: const Key('level-totals'),
+                                    style: text.bodySmall,
+                                  ),
+                              ],
+                            ),
                           ),
                         Wrap(
                           spacing: 8,
                           runSpacing: 4,
                           children: [
-                            for (final i in [team * 2, team * 2 + 1])
+                            for (
+                              var i = team * half;
+                              i < (team + 1) * half;
+                              i++
+                            )
                               ActionChip(
                                 key: Key('next-$i'),
                                 avatar: const Icon(Icons.swap_horiz, size: 18),
@@ -219,8 +294,8 @@ class _QueueScreenState extends State<QueueScreen> {
                               () => store.startGame(
                                 s.id,
                                 court: free.first,
-                                teamA: next.sublist(0, 2),
-                                teamB: next.sublist(2),
+                                teamA: next.sublist(0, half),
+                                teamB: next.sublist(half),
                               ),
                             );
                             if (ok) setState(_swaps.clear);
@@ -240,7 +315,9 @@ class _QueueScreenState extends State<QueueScreen> {
                   dense: true,
                   leading: CircleAvatar(radius: 14, child: Text('${i + 1}')),
                   title: Text(names[p] ?? '?'),
-                  subtitle: Text(gamesLabel(played[p] ?? 0, t)),
+                  subtitle: Text(
+                    withLevel(gamesLabel(played[p] ?? 0, t), levels[p], t),
+                  ),
                   trailing: TextButton(
                     onPressed: () => store.setResting(s.id, p, true),
                     child: Text(t(K.sitOut)),
@@ -296,6 +373,9 @@ class _QueueScreenState extends State<QueueScreen> {
   }
 }
 
+int _levelSum(List<int> team, Map<int, int> levels) =>
+    team.fold(0, (sum, p) => sum + levels[p]!);
+
 String teamName(List<int> team, Map<int, String> names) =>
     team.map((p) => names[p] ?? '?').join(' & ');
 
@@ -308,6 +388,7 @@ String gamesLabel(int n, [Strings t = Strings.en]) => t.games(n);
 class _CourtTile extends StatelessWidget {
   const _CourtTile({
     required this.court,
+    required this.singles,
     required this.game,
     required this.names,
     required this.strings,
@@ -316,6 +397,7 @@ class _CourtTile extends StatelessWidget {
   });
 
   final int court;
+  final bool singles;
   final Game? game;
   final Map<int, String> names;
   final Strings strings;
@@ -329,7 +411,7 @@ class _CourtTile extends StatelessWidget {
     return Card.outlined(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: ListTile(
-        title: Text(t(K.court, {'court': court})),
+        title: Text(t(singles ? K.courtSingles : K.court, {'court': court})),
         subtitle: Text(g == null ? t(K.free) : matchName(g, names, t)),
         trailing: g == null
             ? null

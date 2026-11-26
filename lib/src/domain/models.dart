@@ -3,7 +3,16 @@
 library;
 
 class Player {
-  const Player({required this.id, required this.name, this.guest = false});
+  const Player({
+    required this.id,
+    required this.name,
+    this.guest = false,
+    this.level,
+  });
+
+  /// Levels go from [minLevel] (beginner) to [maxLevel] (strongest).
+  static const int minLevel = 1;
+  static const int maxLevel = 5;
 
   final int id;
   final String name;
@@ -11,19 +20,30 @@ class Player {
   /// Not a regular: new check-ins start as guests (see [Attendance.guest]).
   final bool guest;
 
+  /// Optional playing level, [minLevel] to [maxLevel]; null when not set.
+  /// The court queue uses it to balance teams.
+  final int? level;
+
   Player copyWith({bool? guest}) =>
-      Player(id: id, name: name, guest: guest ?? this.guest);
+      Player(id: id, name: name, guest: guest ?? this.guest, level: level);
+
+  /// The same player with [level] (null clears it).
+  Player withLevel(int? level) =>
+      Player(id: id, name: name, guest: guest, level: level);
 
   Map<String, Object?> toJson() => {
     'id': id,
     'name': name,
     if (guest) 'guest': true,
+    if (level != null) 'level': level,
   };
 
+  /// Saved before levels existed: no level.
   static Player fromJson(Map<String, Object?> json) => Player(
     id: json['id']! as int,
     name: json['name']! as String,
     guest: json['guest'] as bool? ?? false,
+    level: json['level'] as int?,
   );
 }
 
@@ -144,6 +164,7 @@ class Session {
     this.courtSplit = SplitMode.equal,
     this.shuttleSplit = SplitMode.equal,
     this.guestFeeSen = 0,
+    this.singlesCourts = const [],
     this.attendance = const [],
     this.games = const [],
   });
@@ -174,12 +195,19 @@ class Session {
   /// Flat fee each guest pays instead of a share; 0 means guests share like
   /// everyone else.
   final int guestFeeSen;
+
+  /// Courts (1-based, lowest first) where the queue suggests singles; every
+  /// other court plays doubles.
+  final List<int> singlesCourts;
   final List<Attendance> attendance;
 
-  /// Doubles games in the order they were started.
+  /// Games (doubles or singles) in the order they were started.
   final List<Game> games;
 
   int get durationMinutes => endMinute - startMinute;
+
+  /// Whether the queue suggests singles on [court].
+  bool isSingles(int court) => singlesCourts.contains(court);
 
   Session copyWith({
     String? date,
@@ -193,6 +221,7 @@ class Session {
     SplitMode? courtSplit,
     SplitMode? shuttleSplit,
     int? guestFeeSen,
+    List<int>? singlesCourts,
     List<Attendance>? attendance,
     List<Game>? games,
   }) => Session(
@@ -208,6 +237,7 @@ class Session {
     courtSplit: courtSplit ?? this.courtSplit,
     shuttleSplit: shuttleSplit ?? this.shuttleSplit,
     guestFeeSen: guestFeeSen ?? this.guestFeeSen,
+    singlesCourts: singlesCourts ?? this.singlesCourts,
     attendance: attendance ?? this.attendance,
     games: games ?? this.games,
   );
@@ -227,6 +257,7 @@ class Session {
     'courtSplit': courtSplit.name,
     'shuttleSplit': shuttleSplit.name,
     if (guestFeeSen != 0) 'guestFeeSen': guestFeeSen,
+    if (singlesCourts.isNotEmpty) 'singles': singlesCourts,
     'attendance': [for (final a in attendance) a.toJson()],
     'games': [for (final g in games) g.toJson()],
   };
@@ -250,6 +281,10 @@ class Session {
       courtSplit: SplitMode.parse(json['courtSplit'] ?? json['splitMode']),
       shuttleSplit: SplitMode.parse(json['shuttleSplit'] ?? json['splitMode']),
       guestFeeSen: guestFeeSen,
+      // Saved before singles existed: every court plays doubles.
+      singlesCourts: List<int>.unmodifiable(
+        json['singles'] as List<Object?>? ?? const [],
+      ),
       attendance: [
         for (final a in json['attendance']! as List<Object?>)
           Attendance.fromJson((a! as Map).cast<String, Object?>()),
@@ -263,7 +298,8 @@ class Session {
   }
 }
 
-/// A doubles game on one court: [teamA] against [teamB], two players each.
+/// A game on one court: [teamA] against [teamB], two players each (doubles)
+/// or one each (singles).
 class Game {
   const Game({
     required this.id,
@@ -293,6 +329,9 @@ class Game {
   final int? scoreB;
 
   bool get finished => finishedSeq != null;
+
+  /// One player per side.
+  bool get singles => teamA.length == 1;
   List<int> get players => [...teamA, ...teamB];
 
   Game finish({required int seq, int? scoreA, int? scoreB}) => Game(
@@ -318,8 +357,9 @@ class Game {
   static Game fromJson(Map<String, Object?> json) {
     final teamA = List<int>.unmodifiable(json['a']! as List<Object?>);
     final teamB = List<int>.unmodifiable(json['b']! as List<Object?>);
-    if (teamA.length != 2 || teamB.length != 2) {
-      throw const FormatException('A game has two players per team');
+    if (teamA.length != teamB.length ||
+        (teamA.length != 2 && teamA.length != 1)) {
+      throw const FormatException('A game is two against two or one on one');
     }
     return Game(
       id: json['id']! as int,

@@ -141,6 +141,61 @@ void main() {
     expect(AppStore.checkBackup(text), (players: 8, sessions: 1));
   });
 
+  test('levels, singles courts and singles games restore and round-trip; '
+      'a document without them reads as no levels and all doubles', () async {
+    final text = backup(
+      players: [
+        {'id': 1, 'name': 'Aiman', 'level': 4},
+        {'id': 3, 'name': 'Bee Ling'},
+      ],
+      sessions: [
+        session(
+          extra: {
+            'courts': 2,
+            'singles': [2],
+          },
+          attendance: [
+            {'playerId': 1, 'arrive': 0, 'leave': 120},
+            {'playerId': 3, 'arrive': 0, 'leave': 120},
+          ],
+          games: [
+            {
+              'id': 1,
+              'court': 2,
+              'a': [1],
+              'b': [3],
+              'finished': 1,
+              'scoreA': 21,
+              'scoreB': 12,
+            },
+          ],
+        ),
+      ],
+      nextId: 4,
+    );
+    expect(AppStore.checkBackup(text), (players: 2, sessions: 1));
+    final store = AppStore(MemoryStorage());
+    await store.restoreBackup(text);
+    expect(store.levels, {1: 4});
+    final s = store.sessions.single;
+    expect(s.singlesCourts, [2]);
+    expect(s.games.single.singles, isTrue);
+    final again = AppStore(MemoryStorage());
+    await again.restoreBackup(store.exportBackup());
+    expect(again.exportBackup(), store.exportBackup());
+
+    final old = AppStore(MemoryStorage());
+    await old.restoreBackup(backup());
+    expect(old.players.single.level, isNull);
+    expect(old.sessions.single.singlesCourts, isEmpty);
+    final saved = jsonDecode(old.exportBackup()) as Map<String, Object?>;
+    expect((saved['players']! as List).single, {'id': 1, 'name': 'Aiman'});
+    expect(
+      ((saved['sessions']! as List).single as Map).containsKey('singles'),
+      isFalse,
+    );
+  });
+
   group('a bad backup is refused with a reason, and changes nothing', () {
     final cases = <String, (String, Object)>{
       'empty': ('  \n', 'Paste a backup first'),
@@ -527,6 +582,91 @@ void main() {
           nextId: 4,
         ),
         contains('player name in the backup is not valid'),
+      ),
+      'a level above 5': (
+        backup(
+          players: [
+            {'id': 1, 'name': 'Aiman', 'level': 6},
+          ],
+        ),
+        'The level for Aiman must be from 1 to 5',
+      ),
+      'a level of 0': (
+        backup(
+          players: [
+            {'id': 1, 'name': 'Aiman', 'level': 0},
+          ],
+        ),
+        'The level for Aiman must be from 1 to 5',
+      ),
+      'a level that is not a number': (
+        backup(
+          players: [
+            {'id': 1, 'name': 'Aiman', 'level': 'strong'},
+          ],
+        ),
+        contains('not a gelanggang backup'),
+      ),
+      'singles on a court the session does not have': (
+        backup(
+          sessions: [
+            session(
+              extra: {
+                'singles': [2],
+              },
+            ),
+          ],
+        ),
+        "Session 2026-11-26 (Hall): Singles can only be set on this "
+            "session's courts",
+      ),
+      'a singles court listed twice': (
+        backup(
+          sessions: [
+            session(
+              extra: {
+                'courts': 2,
+                'singles': [1, 1],
+              },
+            ),
+          ],
+        ),
+        "Session 2026-11-26 (Hall): Singles can only be set on this "
+            "session's courts",
+      ),
+      'one against two': (
+        backup(
+          sessions: [
+            session(
+              games: [
+                {
+                  'id': 1,
+                  'court': 1,
+                  'a': [1],
+                  'b': [1, 1],
+                },
+              ],
+            ),
+          ],
+        ),
+        contains('not a gelanggang backup'),
+      ),
+      'a singles game against yourself': (
+        backup(
+          sessions: [
+            session(
+              games: [
+                {
+                  'id': 1,
+                  'court': 1,
+                  'a': [1],
+                  'b': [1],
+                },
+              ],
+            ),
+          ],
+        ),
+        'Session 2026-11-26 (Hall) has a game that is not valid',
       ),
     };
     for (final MapEntry(key: name, value: (text, message)) in cases.entries) {

@@ -112,6 +112,18 @@ class _RosterScreenState extends State<RosterScreen> {
                   title: Text(
                     p.guest ? t(K.nameGuest, {'name': p.name}) : p.name,
                   ),
+                  // The level as a badge, so the name and summary read the
+                  // same with or without one.
+                  leading: Semantics(
+                    label: p.level == null
+                        ? t(K.noLevel)
+                        : t(K.levelOf, {'level': p.level!}),
+                    excludeSemantics: true,
+                    child: CircleAvatar(
+                      radius: 16,
+                      child: Text(p.level == null ? '–' : '${p.level}'),
+                    ),
+                  ),
                   subtitle: Text(recordSummary(records[p.id], t)),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(

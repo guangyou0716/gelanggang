@@ -117,6 +117,12 @@ class AppStore extends ChangeNotifier {
 
   Map<int, String> get names => {for (final p in _players) p.id: p.name};
 
+  /// Player id to level, for players with a level set.
+  Map<int, int> get levels => {
+    for (final p in _players)
+      if (p.level != null) p.id: p.level!,
+  };
+
   Session? session(int id) {
     for (final s in _sessions) {
       if (s.id == id) return s;
@@ -250,6 +256,11 @@ class AppStore extends ChangeNotifier {
         throw InputError(K.errNameTwice, {'name': name});
       }
       if (!ids.add(p.id)) throw const InputError(K.errRepeatsId);
+      final level = p.level;
+      if (level != null &&
+          (level < Player.minLevel || level > Player.maxLevel)) {
+        throw InputError(K.errBadLevel, {'name': name});
+      }
       playerIds.add(p.id);
     }
     for (final s in doc.sessions) {
@@ -282,7 +293,7 @@ class AppStore extends ChangeNotifier {
             (!g.finished && a != null);
         if (!gameIds.add(g.id) ||
             g.court < 1 ||
-            g.players.toSet().length != 4 ||
+            g.players.toSet().length != g.players.length ||
             badScore ||
             // Still on court: one game per court, one court per player.
             (!g.finished &&
@@ -327,6 +338,17 @@ class AppStore extends ChangeNotifier {
   /// removed.
   bool canRemovePlayer(int id) =>
       !_sessions.any((s) => s.attendance.any((a) => a.playerId == id));
+
+  /// Sets a player's level ([Player.minLevel] to [Player.maxLevel]), or
+  /// clears it with null.
+  Future<void> setPlayerLevel(int id, int? level) async {
+    if (level != null && (level < Player.minLevel || level > Player.maxLevel)) {
+      final name = names[id] ?? '?';
+      throw InputError(K.errBadLevel, {'name': name});
+    }
+    _players = [for (final p in _players) p.id == id ? p.withLevel(level) : p];
+    await _save();
+  }
 
   /// Marks a player as a guest (or a regular) for their next check-ins.
   /// Sessions already recorded keep what they were.
@@ -406,7 +428,16 @@ class AppStore extends ChangeNotifier {
     return s;
   }
 
+  /// Courts beyond the session's number of courts (after it was lowered)
+  /// lose their singles setting.
   Future<void> updateSession(Session s) async {
+    if (s.singlesCourts.any((c) => c > s.courts)) {
+      s = s.copyWith(
+        singlesCourts: List.unmodifiable(
+          s.singlesCourts.where((c) => c <= s.courts),
+        ),
+      );
+    }
     _check(s);
     _sessions = [for (final old in _sessions) old.id == s.id ? s : old];
     await _save();
@@ -456,8 +487,24 @@ class AppStore extends ChangeNotifier {
     );
   }
 
-  /// Puts [teamA] against [teamB] on [court]. All four must be present, not
-  /// sitting out and not already on court, and the court must be free.
+  /// Makes [court] suggest singles (or doubles again). A game already on it
+  /// carries on as it is.
+  Future<void> setCourtSingles(int sessionId, int court, bool singles) async {
+    final s = session(sessionId)!;
+    final courts = {...s.singlesCourts};
+    if (singles) {
+      courts.add(court);
+    } else {
+      courts.remove(court);
+    }
+    await updateSession(
+      s.copyWith(singlesCourts: List.unmodifiable(courts.toList()..sort())),
+    );
+  }
+
+  /// Puts [teamA] against [teamB] on [court]: two against two, or one on one
+  /// for singles. Everyone must be present, not sitting out and not already
+  /// on court, and the court must be free.
   Future<Game> startGame(
     int sessionId, {
     required int court,
@@ -466,8 +513,14 @@ class AppStore extends ChangeNotifier {
   }) async {
     final s = session(sessionId)!;
     final players = [...teamA, ...teamB];
-    if (teamA.length != 2 || teamB.length != 2 || players.toSet().length != 4) {
-      throw const InputError(K.errFourPlayers);
+    if (teamA.length != teamB.length ||
+        (teamA.length != 2 && teamA.length != 1)) {
+      throw const InputError(K.errTeamSizes);
+    }
+    if (players.toSet().length != players.length) {
+      throw InputError(
+        players.length == 2 ? K.errTwoPlayers : K.errFourPlayers,
+      );
     }
     if (!freeCourts(s).contains(court)) {
       throw InputError(K.errCourtNotFree, {'court': court});
@@ -594,6 +647,12 @@ class AppStore extends ChangeNotifier {
     if (s.guestFeeSen < 0 || s.guestFeeSen > 10000) {
       throw const InputError(K.errGuestFee);
     }
+    final singles = <int>{};
+    for (final c in s.singlesCourts) {
+      if (c < 1 || c > s.courts || !singles.add(c)) {
+        throw const InputError(K.errSinglesCourts);
+      }
+    }
     for (final a in s.attendance) {
       if (a.arriveMinute < 0 ||
           a.leaveMinute > s.durationMinutes ||
@@ -706,5 +765,20 @@ class AppStore extends ChangeNotifier {
     // Daniel paid his share before leaving early (after the games, which
     // decide the shuttle split).
     await setPaid(s.id, early.id, true);
+    // Levels for team balancing (set after the demo games, so the demo's
+    // amounts stay the same); the guest has none, as levels are optional.
+    const demoLevels = {
+      'Aiman': 4,
+      'Bee Ling': 3,
+      'Chandran': 2,
+      'Daniel': 3,
+      'Farah': 5,
+      'Ganesh': 2,
+      'Hui Min': 1,
+    };
+    for (final p in [..._players]) {
+      final level = demoLevels[p.name];
+      if (level != null) await setPlayerLevel(p.id, level);
+    }
   }
 }

@@ -323,6 +323,22 @@ enum K {
   finish('Finish'),
   gameFinished('Game finished'),
   scoreOptional('Score (optional)'),
+  level('Level'),
+  nameLevel('{name} · level {level}'),
+  withLevel('{text} · level {level}'),
+  levelOf('Level {level}'),
+  noLevel('No level'),
+  levelBody(
+    'Balances teams in the court queue: 1 is a beginner, 5 the strongest.',
+  ),
+  levelNone('None'),
+  doubles('Doubles'),
+  singles('Singles'),
+  gameTypeOn('Game on court {court}'),
+  courtSingles('Court {court} · singles'),
+  tickTwo('Tick at least two players under "Who came" first.'),
+  waitingForTwo('Waiting for two free players ({n} free now).'),
+  levelTotals('Levels {a} v {b}'),
 
   // Errors the organiser can fix
   errNewerBackup(
@@ -365,7 +381,11 @@ enum K {
   errGuestFee('Guest fee must be between RM0 and RM100'),
   errTimesWithin('Arrival and leaving times must be within the session'),
   errCourtStillOn('Court {court} still has a game on; finish it first'),
-  errNotAtSession('Everyone in a game must be at the session');
+  errNotAtSession('Everyone in a game must be at the session'),
+  errTwoPlayers('A singles game needs two different players'),
+  errTeamSizes('A game is two against two, or one against one for singles'),
+  errBadLevel('The level for {name} must be from 1 to 5'),
+  errSinglesCourts('Singles can only be set on this session\'s courts');
 
   const K(this.en);
 
