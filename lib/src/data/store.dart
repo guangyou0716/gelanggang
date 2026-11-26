@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../domain/costs.dart';
 import '../domain/models.dart';
 import '../domain/queue.dart';
+import '../l10n/strings.dart';
 
 /// Where the app keeps its single JSON document, plus one spare slot for a
 /// document it could not read (so a change never destroys it).
@@ -78,10 +79,18 @@ class _Document {
   final int nextId;
 }
 
-/// Thrown for input the organiser can fix; the message is shown as is.
-class InputError implements Exception {
-  const InputError(this.message);
-  final String message;
+/// Thrown for input the organiser can fix. The screens show it in the
+/// organiser's language ([localize]); [message] is the English text.
+class InputError implements Exception, Localizable {
+  const InputError(this.key, [this.args = const {}]);
+  final K key;
+  final Map<String, Object> args;
+
+  String get message => localize(Strings.en);
+
+  @override
+  String localize(Strings strings) => strings(key, args);
+
   @override
   String toString() => message;
 }
@@ -162,10 +171,7 @@ class AppStore extends ChangeNotifier {
     final json = (jsonDecode(raw) as Map).cast<String, Object?>();
     final version = json['version'];
     if (version is int && version > schemaVersion) {
-      throw const InputError(
-        'This backup is from a newer version of gelanggang. Update the app, '
-        'then restore it.',
-      );
+      throw const InputError(K.errNewerBackup);
     }
     if (version != schemaVersion) {
       throw const FormatException('Unknown version');
@@ -220,17 +226,14 @@ class AppStore extends ChangeNotifier {
   /// restored group behaves exactly like one entered by hand.
   static _Document _validate(String text) {
     final trimmed = text.trim();
-    if (trimmed.isEmpty) throw const InputError('Paste a backup first');
+    if (trimmed.isEmpty) throw const InputError(K.errPasteFirst);
     final _Document doc;
     try {
       doc = _parse(trimmed);
     } on InputError {
       rethrow;
     } on Object {
-      throw const InputError(
-        'This is not a gelanggang backup, or part of it is missing. Copy the '
-        'whole backup and try again.',
-      );
+      throw const InputError(K.errNotBackup);
     }
     final ids = <int>{};
     final playerIds = <int>{};
@@ -241,29 +244,29 @@ class AppStore extends ChangeNotifier {
       if (name.isEmpty ||
           name.length > 40 ||
           name != name.trim().replaceAll(RegExp(r'\s+'), ' ')) {
-        throw InputError('A player name in the backup is not valid: "$name"');
+        throw InputError(K.errBadName, {'name': name});
       }
       if (!names.add(name.toLowerCase())) {
-        throw InputError('$name is in the backup twice');
+        throw InputError(K.errNameTwice, {'name': name});
       }
-      if (!ids.add(p.id)) throw const InputError('The backup repeats an id');
+      if (!ids.add(p.id)) throw const InputError(K.errRepeatsId);
       playerIds.add(p.id);
     }
     for (final s in doc.sessions) {
-      if (!ids.add(s.id)) throw const InputError('The backup repeats an id');
-      final where = 'Session ${s.date} (${s.venue})';
+      if (!ids.add(s.id)) throw const InputError(K.errRepeatsId);
+      final where = InputError(K.errWhere, {'date': s.date, 'venue': s.venue});
       try {
         _check(s);
       } on InputError catch (e) {
-        throw InputError('$where: ${e.message}');
+        throw InputError(K.errWhereReason, {'where': where, 'reason': e});
       }
       final present = <int>{};
       for (final a in s.attendance) {
         if (!playerIds.contains(a.playerId)) {
-          throw InputError('$where lists a player who is not in the backup');
+          throw InputError(K.errUnknownPlayer, {'where': where});
         }
         if (!present.add(a.playerId)) {
-          throw InputError('$where lists a player twice');
+          throw InputError(K.errPlayerTwice, {'where': where});
         }
       }
       final gameIds = <int>{};
@@ -284,7 +287,7 @@ class AppStore extends ChangeNotifier {
             // Still on court: one game per court, one court per player.
             (!g.finished &&
                 (!busyCourts.add(g.court) || !g.players.every(onCourt.add)))) {
-          throw InputError('$where has a game that is not valid');
+          throw InputError(K.errBadGame, {'where': where});
         }
       }
     }
@@ -306,12 +309,12 @@ class AppStore extends ChangeNotifier {
 
   Future<Player> addPlayer(String name) async {
     final trimmed = name.trim().replaceAll(RegExp(r'\s+'), ' ');
-    if (trimmed.isEmpty) throw const InputError('Enter a name');
+    if (trimmed.isEmpty) throw const InputError(K.errEnterName);
     if (trimmed.length > 40) {
-      throw const InputError('Keep the name under 40 characters');
+      throw const InputError(K.errNameLong);
     }
     if (_players.any((p) => p.name.toLowerCase() == trimmed.toLowerCase())) {
-      throw InputError('$trimmed is already on the list');
+      throw InputError(K.errNameTaken, {'name': trimmed});
     }
     final player = Player(id: _nextId++, name: trimmed);
     _players = [..._players, player]
@@ -368,7 +371,7 @@ class AppStore extends ChangeNotifier {
 
   Future<void> removePlayer(int id) async {
     if (!canRemovePlayer(id)) {
-      throw const InputError('This player is in a past session');
+      throw const InputError(K.errInPastSession);
     }
     _players = _players.where((p) => p.id != id).toList();
     await _save();
@@ -421,10 +424,9 @@ class AppStore extends ChangeNotifier {
     final s = session(sessionId)!;
     final present = s.attendance.any((a) => a.playerId == playerId);
     if (present && s.games.any((g) => g.players.contains(playerId))) {
-      throw InputError(
-        '${names[playerId] ?? 'This player'} has games in this session; '
-        'remove those games first',
-      );
+      throw InputError(K.errHasGames, {
+        'name': names[playerId] ?? K.thisPlayer,
+      });
     }
     await updateSession(
       s.copyWith(
@@ -465,15 +467,15 @@ class AppStore extends ChangeNotifier {
     final s = session(sessionId)!;
     final players = [...teamA, ...teamB];
     if (teamA.length != 2 || teamB.length != 2 || players.toSet().length != 4) {
-      throw const InputError('A game needs four different players');
+      throw const InputError(K.errFourPlayers);
     }
     if (!freeCourts(s).contains(court)) {
-      throw InputError('Court $court is not free');
+      throw InputError(K.errCourtNotFree, {'court': court});
     }
     final waiting = waitingOrder(s).toSet();
     for (final p in players) {
       if (!waiting.contains(p)) {
-        throw InputError('${names[p] ?? 'A player'} is not free to play');
+        throw InputError(K.errNotFree, {'name': names[p] ?? K.aPlayer});
       }
     }
     final game = Game(
@@ -496,16 +498,16 @@ class AppStore extends ChangeNotifier {
   }) async {
     final s = session(sessionId)!;
     final game = s.games.firstWhere((g) => g.id == gameId);
-    if (game.finished) throw const InputError('This game is already finished');
+    if (game.finished) throw const InputError(K.errAlreadyFinished);
     if ((scoreA == null) != (scoreB == null)) {
-      throw const InputError('Enter both scores or neither');
+      throw const InputError(K.errBothScores);
     }
     if (scoreA != null && scoreB != null) {
       if (scoreA < 0 || scoreA > 99 || scoreB < 0 || scoreB > 99) {
-        throw const InputError('Scores must be between 0 and 99');
+        throw const InputError(K.errScoreRange);
       }
       if (scoreA == scoreB) {
-        throw const InputError('A badminton game cannot end in a draw');
+        throw const InputError(K.errDraw);
       }
     }
     final seq = s.games.fold<int>(
@@ -568,48 +570,44 @@ class AppStore extends ChangeNotifier {
 
   static void _check(Session s) {
     if (!_isRealDate(s.date)) {
-      throw const InputError('Enter the date as YYYY-MM-DD');
+      throw const InputError(K.errDate);
     }
-    if (s.venue.isEmpty) throw const InputError('Enter the venue');
+    if (s.venue.isEmpty) throw const InputError(K.errVenue);
     if (s.venue.length > 60) {
-      throw const InputError('Keep the venue under 60 characters');
+      throw const InputError(K.errVenueLong);
     }
     if (s.endMinute <= s.startMinute) {
-      throw const InputError('The session must end after it starts');
+      throw const InputError(K.errEndAfterStart);
     }
     if (s.courts < 1 || s.courts > 20) {
-      throw const InputError('Courts must be between 1 and 20');
+      throw const InputError(K.errCourts);
     }
     if (s.courtRateSen < 0 || s.courtRateSen > 100000) {
-      throw const InputError('Court rate must be between RM0 and RM1000');
+      throw const InputError(K.errCourtRate);
     }
     if (s.shuttlePriceSen < 0 || s.shuttlePriceSen > 10000) {
-      throw const InputError('Shuttle price must be between RM0 and RM100');
+      throw const InputError(K.errShuttlePrice);
     }
     if (s.shuttles < 0 || s.shuttles > 500) {
-      throw const InputError('Shuttles must be between 0 and 500');
+      throw const InputError(K.errShuttles);
     }
     if (s.guestFeeSen < 0 || s.guestFeeSen > 10000) {
-      throw const InputError('Guest fee must be between RM0 and RM100');
+      throw const InputError(K.errGuestFee);
     }
     for (final a in s.attendance) {
       if (a.arriveMinute < 0 ||
           a.leaveMinute > s.durationMinutes ||
           a.leaveMinute < a.arriveMinute) {
-        throw const InputError(
-          'Arrival and leaving times must be within the session',
-        );
+        throw const InputError(K.errTimesWithin);
       }
     }
     final present = {for (final a in s.attendance) a.playerId};
     for (final g in s.games) {
       if (!g.finished && g.court > s.courts) {
-        throw InputError(
-          'Court ${g.court} still has a game on; finish it first',
-        );
+        throw InputError(K.errCourtStillOn, {'court': g.court});
       }
       if (!g.players.every(present.contains)) {
-        throw const InputError('Everyone in a game must be at the session');
+        throw const InputError(K.errNotAtSession);
       }
     }
   }

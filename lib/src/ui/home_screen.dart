@@ -3,18 +3,21 @@ import 'package:material_ui/material_ui.dart';
 import '../data/store.dart';
 import '../domain/costs.dart';
 import '../domain/money.dart';
+import '../l10n/language.dart';
 import 'backup_screen.dart';
 import 'roster_screen.dart';
 import 'session_form_screen.dart';
 import 'session_screen.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key, required this.store});
+  const HomeScreen({super.key, required this.store, required this.language});
 
   final AppStore store;
+  final LanguageSetting language;
 
   @override
   Widget build(BuildContext context) {
+    final t = context.s;
     return ListenableBuilder(
       listenable: store,
       builder: (context, _) {
@@ -23,8 +26,9 @@ class HomeScreen extends StatelessWidget {
           appBar: AppBar(
             title: const Text('gelanggang'),
             actions: [
+              _LanguageButton(language: language),
               IconButton(
-                tooltip: 'Players',
+                tooltip: t(K.players),
                 icon: const Icon(Icons.group_outlined),
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
@@ -33,7 +37,7 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
               IconButton(
-                tooltip: 'Backup and restore',
+                tooltip: t(K.backupAndRestore),
                 icon: Badge(
                   isLabelVisible: store.setAside != null,
                   child: const Icon(Icons.settings_backup_restore),
@@ -62,16 +66,13 @@ class HomeScreen extends StatelessWidget {
               }
             },
             icon: const Icon(Icons.add),
-            label: const Text('New session'),
+            label: Text(t(K.newSession)),
           ),
           body: sessions.isEmpty
-              ? const Center(
+              ? Center(
                   child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Text(
-                      'No sessions yet. Add your players, then start a session.',
-                      textAlign: TextAlign.center,
-                    ),
+                    padding: const EdgeInsets.all(24),
+                    child: Text(t(K.noSessions), textAlign: TextAlign.center),
                   ),
                 )
               : ListView.separated(
@@ -81,11 +82,25 @@ class HomeScreen extends StatelessWidget {
                   itemBuilder: (context, i) {
                     final s = sessions[i];
                     final owed = outstandingSen(s);
+                    final figures = {
+                      'players': t.players(s.attendance.length),
+                      'total': formatRm(totalCostSen(s)),
+                      'owed': formatRm(owed),
+                    };
                     return ListTile(
-                      title: Text('${s.date} · ${s.venue}'),
+                      title: Text(
+                        t(K.sessionListTitle, {
+                          'date': t.date(s.date),
+                          'venue': s.venue,
+                        }),
+                      ),
                       subtitle: Text(
-                        '${s.attendance.length} players · ${formatRm(totalCostSen(s))}'
-                        '${owed > 0 ? ' · ${formatRm(owed)} to collect' : ' · all paid'}',
+                        t(
+                          owed > 0
+                              ? K.sessionListToCollect
+                              : K.sessionListAllPaid,
+                          figures,
+                        ),
                       ),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => Navigator.of(context).push(
@@ -99,6 +114,45 @@ class HomeScreen extends StatelessWidget {
                 ),
         );
       },
+    );
+  }
+}
+
+/// Picks the app's language: the device's, or one chosen here (kept).
+class _LanguageButton extends StatelessWidget {
+  const _LanguageButton({required this.language});
+
+  final LanguageSetting language;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.s;
+    final device = languageForDevice(
+      WidgetsBinding.instance.platformDispatcher.locales,
+    );
+    final chosen = language.chosen;
+    // A menu value for "follow the device"; null would mean "closed".
+    const followDevice = 'device';
+    return PopupMenuButton<String>(
+      key: const Key('language'),
+      tooltip: t(K.language),
+      icon: const Icon(Icons.translate),
+      onSelected: (code) => language.choose(AppLanguage.fromCode(code)),
+      itemBuilder: (_) => [
+        CheckedPopupMenuItem(
+          key: const Key('language-device'),
+          value: followDevice,
+          checked: chosen == null,
+          child: Text(t(K.languageDevice, {'language': device.nativeName})),
+        ),
+        for (final l in AppLanguage.values)
+          CheckedPopupMenuItem(
+            key: Key('language-${l.code}'),
+            value: l.code,
+            checked: chosen == l,
+            child: Text(l.nativeName),
+          ),
+      ],
     );
   }
 }

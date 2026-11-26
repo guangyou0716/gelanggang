@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import '../data/store.dart';
 import '../domain/history.dart';
 import '../domain/money.dart';
+import '../l10n/language.dart';
 import 'common.dart';
 import 'player_screen.dart';
 
@@ -33,8 +34,9 @@ class _RosterScreenState extends State<RosterScreen> {
   @override
   Widget build(BuildContext context) {
     final store = widget.store;
+    final t = context.s;
     return Scaffold(
-      appBar: AppBar(title: const Text('Players')),
+      appBar: AppBar(title: Text(t(K.players))),
       body: ListenableBuilder(
         listenable: store,
         builder: (context, _) {
@@ -43,7 +45,11 @@ class _RosterScreenState extends State<RosterScreen> {
             0,
             (sum, r) => sum + r.owedSen,
           );
-          final reminder = balancesText(store.sessions, store.names);
+          final reminder = balancesText(
+            store.sessions,
+            store.names,
+            strings: t,
+          );
           return ListView(
             padding: const EdgeInsets.only(bottom: 32),
             children: [
@@ -56,30 +62,30 @@ class _RosterScreenState extends State<RosterScreen> {
                         key: const Key('player-name'),
                         controller: _name,
                         textCapitalization: TextCapitalization.words,
-                        decoration: const InputDecoration(
-                          labelText: 'Name',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: t(K.name),
+                          border: const OutlineInputBorder(),
                         ),
                         onSubmitted: (_) => _add(),
                       ),
                     ),
                     const SizedBox(width: 12),
-                    FilledButton(onPressed: _add, child: const Text('Add')),
+                    FilledButton(onPressed: _add, child: Text(t(K.add))),
                   ],
                 ),
               ),
               if (store.players.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('No players yet.'),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(t(K.noPlayers)),
                 )
               else
                 ListTile(
                   key: const Key('balances-total'),
                   title: Text(
                     toCollect > 0
-                        ? '${formatRm(toCollect)} to collect across sessions'
-                        : 'Everyone is paid up',
+                        ? t(K.toCollectAcross, {'amount': formatRm(toCollect)})
+                        : t(K.everyonePaidUp),
                   ),
                   // Under the total rather than beside it, so it still fits
                   // with large text.
@@ -93,21 +99,20 @@ class _RosterScreenState extends State<RosterScreen> {
                                 ClipboardData(text: reminder),
                               );
                               if (context.mounted) {
-                                toast(
-                                  context,
-                                  'Copied. Paste it into your group chat.',
-                                );
+                                toast(context, t(K.copiedForChat));
                               }
                             },
                             icon: const Icon(Icons.copy),
-                            label: const Text('Copy reminder'),
+                            label: Text(t(K.copyReminder)),
                           ),
                         ),
                 ),
               for (final p in store.players)
                 ListTile(
-                  title: Text(p.guest ? '${p.name} (guest)' : p.name),
-                  subtitle: Text(recordSummary(records[p.id])),
+                  title: Text(
+                    p.guest ? t(K.nameGuest, {'name': p.name}) : p.name,
+                  ),
+                  subtitle: Text(recordSummary(records[p.id], t)),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) =>
@@ -116,7 +121,7 @@ class _RosterScreenState extends State<RosterScreen> {
                   ),
                   trailing: store.canRemovePlayer(p.id)
                       ? IconButton(
-                          tooltip: 'Remove ${p.name}',
+                          tooltip: t(K.removeName, {'name': p.name}),
                           icon: const Icon(Icons.delete_outline),
                           onPressed: () =>
                               attempt(context, () => store.removePlayer(p.id)),
