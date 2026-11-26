@@ -6,6 +6,7 @@ import '../domain/money.dart';
 import '../l10n/language.dart';
 import 'backup_screen.dart';
 import 'roster_screen.dart';
+import 'season_screen.dart';
 import 'session_form_screen.dart';
 import 'session_screen.dart';
 
@@ -33,6 +34,16 @@ class HomeScreen extends StatelessWidget {
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) => RosterScreen(store: store),
+                  ),
+                ),
+              ),
+              IconButton(
+                key: const Key('open-season'),
+                tooltip: t(K.season),
+                icon: const Icon(Icons.insights_outlined),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => SeasonScreen(store: store),
                   ),
                 ),
               ),

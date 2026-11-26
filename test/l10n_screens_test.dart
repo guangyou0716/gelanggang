@@ -92,6 +92,20 @@ Future<void> tour(
   await tester.tap(find.byTooltip(backup));
   await tester.pumpAndSettle();
   await expectTexts('backup');
+  await back();
+  await tester.tap(find.byKey(const Key('open-season')));
+  await tester.pumpAndSettle();
+  // "All time", so the texts do not depend on the day the test runs.
+  await tester.tap(find.byKey(const Key('range-all')));
+  await tester.pumpAndSettle();
+  await expectTexts('season');
+  await back();
+  await tester.tap(find.byType(FloatingActionButton));
+  await tester.pumpAndSettle();
+  await expectTexts('form');
+  await tester.tap(find.byKey(const Key('repeat-fill')));
+  await tester.pumpAndSettle();
+  await expectTexts('repeat');
 }
 
 const msTexts = {
@@ -109,6 +123,19 @@ const msTexts = {
   'players': ['Salin peringatan', 'belum dikutip bagi semua sesi', 'tetamu'],
   'player': ['Sesi', 'Perlawanan', 'Hutang', 'Sejarah', 'Tetamu'],
   'backup': ['Sandarkan', 'Pulihkan', 'Salin sandaran', '8 pemain'],
+  'season': [
+    'Ringkasan musim',
+    'Semua masa · 2 sesi',
+    'Salin sebagai CSV',
+    'menang',
+    'Dibayar',
+  ],
+  'form': [
+    'Sama seperti kali lepas?',
+    'Demo Sports Hall (synthetic) · 8 pemain',
+    'Isi',
+  ],
+  'repeat': ['Diisi daripada Khamis, 26 Nov 2026', 'pemain yang sama'],
 };
 
 const zhTexts = {
@@ -118,6 +145,9 @@ const zhTexts = {
   'players': ['复制提醒', '所有场次共待收', '访客'],
   'player': ['场次', '局数', '欠款', '记录', '访客'],
   'backup': ['备份', '恢复', '复制备份', '8 名球员'],
+  'season': ['赛季汇总', '全部 · 2 场', '复制为 CSV', '赢', '已付'],
+  'form': ['和上次一样？', 'Demo Sports Hall (synthetic) · 8 名球员', '填入'],
+  'repeat': ['已按 2026年11月26日（周四） 的场次填入', '为同样的球员签到'],
 };
 
 void main() {

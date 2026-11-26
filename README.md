@@ -26,6 +26,10 @@ money. It only works out the amounts and writes a message you can paste into Wha
   <img src="docs/player-level.png" alt="A player's screen with the level picker: None, 1 to 5, with 5 selected" width="280">
 </p>
 <p>
+  <img src="docs/season.png" alt="Season summary for the last 3 months: each player's sessions with attendance rate, games, wins, and paid of share with what is still owed, plus a Copy as CSV button" width="280">
+  <img src="docs/repeat.png" alt="New session filled in from the last one: same venue, times, courts and prices, shuttles back to 0, and a tick to check in the same 8 players" width="280">
+</p>
+<p>
   <img src="docs/home-ms.png" alt="The session list in Bahasa Melayu, with dates like Khamis, 26 Nov 2026" width="280">
   <img src="docs/session-ms.png" alt="A session in Bahasa Melayu: Gelanggang, Bulu tangkis, Jumlah, Kos gelanggang, Sama rata / Ikut masa / Ikut perlawanan" width="280">
   <img src="docs/message-zh.png" alt="The group message in Simplified Chinese: 羽毛球 2026年11月26日（周四）, 场地按在场时间分摊…" width="280">
@@ -64,6 +68,15 @@ money. It only works out the amounts and writes a message you can paste into Wha
 - **History**: the Players screen shows each player's sessions, games and what they owe across all sessions,
   with a "Copy reminder" message listing everyone who still owes. Open a player for their session history,
   wins, and a button to mark everything they owe as paid.
+- **Same as last time**: a new session offers to fill itself in from the latest one (venue, times, courts,
+  court rate, shuttle price, guest fee, split modes and singles courts). The date stays today and shuttles
+  start at 0. A tick (on by default) checks in the same players for the whole session; untick it to start
+  with nobody.
+- **Season summary**: this month, last month, the last 3 months, this year or all time. Each player's
+  sessions and attendance rate, games, wins, and what they paid of their share and still owe, with totals
+  for the period. *Copy as CSV* puts it on the clipboard for a spreadsheet: RFC 4180 (CRLF, quoted fields),
+  English column names, plain ringgit amounts, and names that a spreadsheet would run as a formula
+  (`=`, `+`, `-`, `@`, tab, carriage return at the start) get a leading apostrophe so they stay text.
 - **Court queue**: a "who plays next" board for doubles and singles. It shows each court (free, or who is on
   it), suggests the next game and pairs it up, keeps a waiting list and logs finished games with an optional
   score.
@@ -196,6 +209,13 @@ Built and tested with Flutter 3.50 (Dart 3.14).
   the semantics tree, and check every screen at twice the text size for overflow and squeezed text. Key
   checks are mutation-tested (each was broken on purpose and a test failed). Language tests are described
   under [Languages](#languages).
+- Season summary tests: date ranges across month and year ends and leap years, both ends of a range
+  included, a randomised test (40 groups x 5 ranges) that the shares add up to the cost of exactly the
+  sessions in range and paid + owed = share for everyone, the CSV text byte for byte, and the formula /
+  quoting rules. "Same as last time" tests: guests stay guests, unknown or repeated players are skipped,
+  singles courts are cut to the new number of courts, a refused session does not use up an id, an old
+  version 1 document (from the first app version) can be repeated and read back, and damaged saved data
+  stays set aside. Nine deliberate bugs in this code each made a test fail.
 - GitHub Actions runs `dart format`, `flutter analyze`, `flutter test --coverage` and `flutter build web` on
   every push and pull request, and a second job runs the [end-to-end tests](#end-to-end-tests-on-a-real-app)
   on the Linux desktop app under `xvfb`.
@@ -212,6 +232,7 @@ Built and tested with Flutter 3.50 (Dart 3.14).
 6. ✅ End-to-end tests on the real app (`integration_test`, Linux desktop in CI), session title fits narrow phones.
 7. ✅ Player levels (1-5) and singles courts in the queue: no big level gaps among equally-waiting players,
    balanced team level sums, fairness order unchanged.
+8. ✅ "Same as last time" for a new session, and a season summary per player with a CSV copy.
 
 ## Privacy
 

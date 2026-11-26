@@ -19,6 +19,7 @@ class PlayerRecord {
     this.wins = 0,
     this.owedSen = 0,
     this.unpaidSessions = 0,
+    this.shareSen = 0,
     this.lastDate,
   });
 
@@ -33,6 +34,13 @@ class PlayerRecord {
   /// Still owed over all sessions (see `dueSen`).
   final int owedSen;
   final int unpaidSessions;
+
+  /// Their shares added up over all sessions (what they were asked to pay).
+  final int shareSen;
+
+  /// What they have paid towards [shareSen]: the share minus what is still
+  /// owed (never more than the share; an overpayment is not counted).
+  int get paidSen => shareSen - owedSen;
 
   /// Date of the latest session they came to.
   final String? lastDate;
@@ -55,13 +63,15 @@ Map<int, PlayerRecord> playerRecords(Iterable<Session> sessions) {
     for (final att in s.attendance) {
       final id = att.playerId;
       final r = records[id] ?? const PlayerRecord();
-      final owed = dueSen(att, shares[id] ?? 0);
+      final share = shares[id] ?? 0;
+      final owed = dueSen(att, share);
       records[id] = PlayerRecord(
         sessions: r.sessions + 1,
         games: r.games + (played[id] ?? 0),
         wins: r.wins + (wins[id] ?? 0),
         owedSen: r.owedSen + owed,
         unpaidSessions: r.unpaidSessions + (owed > 0 ? 1 : 0),
+        shareSen: r.shareSen + share,
         lastDate: s.date,
       );
     }

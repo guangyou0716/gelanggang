@@ -123,6 +123,21 @@ class AppStore extends ChangeNotifier {
       if (p.level != null) p.id: p.level!,
   };
 
+  /// The latest session (by date, then the one made last), to repeat it.
+  Session? get lastSession {
+    final all = sessions;
+    return all.isEmpty ? null : all.first;
+  }
+
+  /// Players at [s] who are still in the roster, in check-in order.
+  List<int> rosterPlayersAt(Session s) {
+    final roster = {for (final p in _players) p.id};
+    return [
+      for (final a in s.attendance)
+        if (roster.contains(a.playerId)) a.playerId,
+    ];
+  }
+
   Session? session(int id) {
     for (final s in _sessions) {
       if (s.id == id) return s;
@@ -409,9 +424,16 @@ class AppStore extends ChangeNotifier {
     required int shuttles,
     required int shuttlePriceSen,
     int guestFeeSen = 0,
+    SplitMode courtSplit = SplitMode.equal,
+    SplitMode shuttleSplit = SplitMode.equal,
+    List<int> singlesCourts = const [],
+    Iterable<int> playerIds = const [],
   }) async {
+    final duration = endMinute - startMinute;
+    final roster = {for (final p in _players) p.id: p};
+    final checkedIn = <int>{};
     final s = Session(
-      id: _nextId++,
+      id: _nextId,
       date: date,
       venue: venue.trim(),
       startMinute: startMinute,
@@ -421,8 +443,26 @@ class AppStore extends ChangeNotifier {
       shuttles: shuttles,
       shuttlePriceSen: shuttlePriceSen,
       guestFeeSen: guestFeeSen,
+      courtSplit: courtSplit,
+      shuttleSplit: shuttleSplit,
+      // A repeated session may have fewer courts than the one it copies.
+      singlesCourts: List.unmodifiable(
+        {...singlesCourts}.where((c) => c >= 1 && c <= courts).toList()..sort(),
+      ),
+      attendance: List.unmodifiable([
+        // Players no longer in the roster (or listed twice) are skipped.
+        for (final id in playerIds)
+          if (roster.containsKey(id) && checkedIn.add(id))
+            Attendance(
+              playerId: id,
+              arriveMinute: 0,
+              leaveMinute: duration < 0 ? 0 : duration,
+              guest: roster[id]!.guest,
+            ),
+      ]),
     );
     _check(s);
+    _nextId++;
     _sessions = [..._sessions, s];
     await _save();
     return s;

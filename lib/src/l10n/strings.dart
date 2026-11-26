@@ -340,6 +340,32 @@ enum K {
   waitingForTwo('Waiting for two free players ({n} free now).'),
   levelTotals('Levels {a} v {b}'),
 
+  // Repeat last session
+  repeatLast('Same as last time?'),
+  repeatLastBody('{date} · {venue} · {players}'),
+  repeatFill('Fill in'),
+  repeatPlayers('Check in the same players ({players})'),
+  repeatFilled(
+    'Filled in from {date}. Enter the shuttles used once you know them.',
+  ),
+
+  // Season summary
+  season('Season summary'),
+  rangeThisMonth('This month'),
+  rangeLastMonth('Last month'),
+  rangeLast3Months('Last 3 months'),
+  rangeThisYear('This year'),
+  rangeAll('All time'),
+  seasonPeriod('{from} to {to} · {sessions}'),
+  seasonAllTime('All time · {sessions}'),
+  seasonEmpty('No sessions in this period.'),
+  seasonTotals('Asked {share} · paid {paid} · owed {owed}'),
+  seasonPlayed('{sessions} ({percent}%) · {games} · {wins} won'),
+  seasonPaid('Paid {paid} of {share}'),
+  seasonPaidOwes('Paid {paid} of {share} · owes {owed}'),
+  copyCsv('Copy as CSV'),
+  csvCopied('Copied as CSV. Paste it into a spreadsheet.'),
+
   // Errors the organiser can fix
   errNewerBackup(
     'This backup is from a newer version of gelanggang. Update the app, then '
