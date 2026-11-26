@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../data/store.dart';
 import '../domain/costs.dart';
 import '../domain/history.dart';
+import '../domain/models.dart';
 import '../domain/money.dart';
 import '../domain/queue.dart';
 import '../l10n/language.dart';
@@ -61,6 +62,46 @@ class PlayerScreen extends StatelessWidget {
                 subtitle: Text(t(K.guestSwitchBody)),
                 value: player.guest,
                 onChanged: (v) => store.setPlayerGuest(playerId, v),
+              ),
+              ListTile(
+                title: Text(t(K.level)),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(t(K.levelBody)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        for (final level in <int?>[
+                          null,
+                          for (
+                            var l = Player.minLevel;
+                            l <= Player.maxLevel;
+                            l++
+                          )
+                            l,
+                        ])
+                          ChoiceChip(
+                            key: Key('level-${level ?? 'none'}'),
+                            label: Text(
+                              level == null ? t(K.levelNone) : '$level',
+                            ),
+                            tooltip: level == null
+                                ? null
+                                : t(K.nameLevel, {
+                                    'name': player.name,
+                                    'level': level,
+                                  }),
+                            selected: player.level == level,
+                            onSelected: (_) =>
+                                store.setPlayerLevel(playerId, level),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
               if (owed > 0)
                 Padding(

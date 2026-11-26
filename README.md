@@ -13,13 +13,17 @@ money. It only works out the amounts and writes a message you can paste into Wha
   <img src="docs/queue.png" alt="Court queue: one court in play, the next four paired up, waiting list and game log" width="280">
 </p>
 <p>
-  <img src="docs/players.png" alt="Players with sessions, games and what each still owes across sessions" width="280">
+  <img src="docs/players.png" alt="Players with a level badge, sessions, games and what each still owes across sessions" width="280">
   <img src="docs/player.png" alt="One player's history with a button to mark everything paid" width="280">
   <img src="docs/backup.png" alt="Backup and restore: copy a backup as text, or paste one to restore" width="280">
 </p>
 <p>
   <img src="docs/part-paid.png" alt="After the split changed, Daniel's row says he paid RM 12.71 and RM 1.49 more is due" width="280">
   <img src="docs/large-text.png" alt="The session screen at twice the text size, with each player's share and buttons on their own line" width="280">
+</p>
+<p>
+  <img src="docs/queue-singles.png" alt="Court queue with court 2 switched to singles: the next game is one on one, and the waiting list shows each player's level" width="280">
+  <img src="docs/player-level.png" alt="A player's screen with the level picker: None, 1 to 5, with 5 selected" width="280">
 </p>
 <p>
   <img src="docs/home-ms.png" alt="The session list in Bahasa Melayu, with dates like Khamis, 26 Nov 2026" width="280">
@@ -30,7 +34,9 @@ money. It only works out the amounts and writes a message you can paste into Wha
 ## What it does
 
 - **Players**: keep your group's roster (names are trimmed, duplicates refused). Mark someone as a guest and
-  they check in as a guest from then on (sessions already recorded keep what they were).
+  they check in as a guest from then on (sessions already recorded keep what they were). Give a player an
+  optional **level** from 1 (beginner) to 5 (strongest) on their screen; it shows as a badge on the roster
+  and helps the court queue balance teams.
 - **Sessions**: date, venue, start/end time, number of courts and hourly court rate, shuttles used and price
   per shuttle. Court hire = courts × rate × hours, rounded half up to the sen.
 - **Who came**: tick the players who came; change arrival/leaving times for late arrivals or early leavers.
@@ -58,11 +64,22 @@ money. It only works out the amounts and writes a message you can paste into Wha
 - **History**: the Players screen shows each player's sessions, games and what they owe across all sessions,
   with a "Copy reminder" message listing everyone who still owes. Open a player for their session history,
   wins, and a button to mark everything they owe as paid.
-- **Court queue**: a "who plays next" board for doubles. It shows each court (free, or who is on it), suggests
-  the next four and pairs them up, keeps a waiting list and logs finished games with an optional score.
+- **Court queue**: a "who plays next" board for doubles and singles. It shows each court (free, or who is on
+  it), suggests the next game and pairs it up, keeps a waiting list and logs finished games with an optional
+  score.
+  - **Doubles or singles per court**: the Doubles / Singles switch next to "Next up" sets the court the
+    suggestion is for (the lowest free court, or when all are busy the one in play longest). A singles court
+    suggests two players; the setting is kept with the session and a game already on court carries on.
   - Whoever came off court longest ago goes first (someone who has not played yet has waited since the
     start); ties go to whoever has played fewer games, then to whoever was ticked in first.
-  - The four are paired to avoid repeat partners first and repeat opponents second.
+  - **Levels never break that order.** Only among players who have waited exactly as long as the last one who
+    fits can levels change who plays, and only to avoid a big level gap (3 or more, e.g. a level 1 with a
+    level 4): the earliest ticked-in group without one is picked, or the group with the smallest gap if every
+    group has one. A player passed over this way has waited longer than everyone else next time, so they go
+    first. Players without a level do not count towards a gap.
+  - The four are paired to avoid repeat partners first, then to make the two teams' level sums as close as
+    possible (a player without a level counts as the average of the others), then to avoid repeat opponents.
+    When all four have levels the board shows the totals ("Levels 7 v 7").
   - The suggestion is deterministic. Tap a name to swap in someone else, mark a player as sitting out (they
     still share the cost), take a game off court, or remove a wrong log entry.
   - The queue does not watch the clock: when someone leaves early, mark them as sitting out.
@@ -122,7 +139,9 @@ flutter build web --release  # static site in build/web
 1. **A club night**: first launch shows the demo group; add a player (a duplicate is refused); create a session;
    check in five players; run a court-queue game and log 21-15; split courts and shuttles by games (the player
    who only waited pays RM 0.00); mark a share paid; then close and reopen the app and find everything,
-   including the game and the payment, read back from the device.
+   including the game and the payment, read back from the device. Then switch court 1 to singles, play a
+   one-on-one game (the player who waited plays the first of the others), log 21-10, reopen again and find
+   the singles court, the game and the new split by games.
 2. **Backup round-trip**: copy a backup through the system clipboard, start a "new phone" with nothing saved,
    refuse a cut-off paste, restore the whole backup after the confirmation, restart, and check it stayed.
 3. **Language switch**: switch to 简体中文 (dates and the settle-up message follow), restart and stay in Chinese,
@@ -152,6 +171,14 @@ Built and tested with Flutter 3.50 (Dart 3.14).
   last about the same time, games played never differ by more than one and nobody plays twice while someone
   else waits. In any finishing order, nobody jumps the queue, the suggestion is the same after a save and
   reload, and the pairing never repeats a partnership that could have been avoided.
+- Levels and singles have their own property test (150 random groups of 2-14 players with random levels,
+  some missing, and random singles courts, 40 rounds each, in any finishing order), checked against brute
+  force: nobody who waited longer is passed over, the group picked is the first without a big level gap (or
+  the smallest gap), the team split is the cheapest of the three (repeat partners, then level gap, then
+  repeat opponents), without levels the queue is exactly as before, and splits by games still add up with
+  singles games mixed in. Nine deliberate bugs (ignoring levels, reordering the pairing rules, an off-by-one
+  gap limit, counting a missing level as 0, widening the fairness tie group, and others) each made a test
+  fail.
 - Widget tests drive the real screens: add players, create a session (with form validation), tick
   attendance, mark paid, switch to split by time, edit arrival times, check the message text, and run the
   court queue (swap a player, start a game, refuse a drawn score, log a result, sit someone out), switch a
@@ -162,8 +189,8 @@ Built and tested with Flutter 3.50 (Dart 3.14).
   fee. Saved data from before this version (one split mode, no guests) still loads, and damaged fees or guest
   flags are ignored without overwriting what is saved.
 - Backup tests restore the demo group on a fresh store and compare it byte for byte, survive a restart, and
-  refuse 26 kinds of bad backup (cut off, wrong types, newer version, unknown players, repeated ids, invalid
-  sessions, games and scores) each with its own message and without changing anything. Paid-amount tests cover
+  refuse 33 kinds of bad backup (cut off, wrong types, newer version, unknown players, repeated ids, invalid
+  sessions, games and scores, levels outside 1-5, singles on a court the session does not have) each with its own message and without changing anything. Paid-amount tests cover
   shares going up and down after paying, settle all, carried-over balances and damaged amounts. Accessibility
   tests run Material's tap target, label and contrast guidelines on every screen, activate a control through
   the semantics tree, and check every screen at twice the text size for overflow and squeezed text. Key
@@ -183,7 +210,8 @@ Built and tested with Flutter 3.50 (Dart 3.14).
 4. ✅ Backup/restore, unreadable data set aside, paid amounts, accessibility pass.
 5. ✅ Bahasa Melayu and 简体中文 (whole UI and the group messages), language picker, one-step "not paid".
 6. ✅ End-to-end tests on the real app (`integration_test`, Linux desktop in CI), session title fits narrow phones.
-7. Levels and singles in the queue.
+7. ✅ Player levels (1-5) and singles courts in the queue: no big level gaps among equally-waiting players,
+   balanced team level sums, fairness order unchanged.
 
 ## Privacy
 

@@ -40,3 +40,8 @@ String recordSummary(PlayerRecord? r, [Strings t = Strings.en]) {
         : t(K.paidUp),
   ].join(' · ');
 }
+
+/// "[text] · level 4" (e.g. "2 games · level 4"), or just [text] when no
+/// level is set.
+String withLevel(String text, int? level, Strings t) =>
+    level == null ? text : t(K.withLevel, {'text': text, 'level': level});

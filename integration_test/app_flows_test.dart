@@ -204,6 +204,37 @@ void main() {
     );
     await tapOn(tester, find.byKey(const Key('open-queue')));
     expect(find.text('Court 1 · 21-15'), findsOneWidget);
+
+    // A singles game: court 1 switched to singles pairs the one who has
+    // waited longest (Jun Wei) with the first of the others; it is logged
+    // and counts towards the split by games.
+    await tapOn(tester, find.byKey(const Key('type-singles')));
+    expect(find.text('Court 1 · singles'), findsOneWidget);
+    String chip(int i) =>
+        (tester.widget<ActionChip>(find.byKey(Key('next-$i'))).label as Text)
+            .data!;
+    expect([chip(0), chip(1)], ['Jun Wei', 'Aiman']);
+    expect(find.byKey(const Key('next-2')), findsNothing);
+    await tapOn(tester, find.byKey(const Key('start-game')));
+    expect(find.text('Jun Wei vs Aiman'), findsOneWidget);
+    await tapOn(tester, find.byKey(const Key('finish-1')));
+    await tester.enterText(find.byKey(const Key('score-a')), '21');
+    await tester.enterText(find.byKey(const Key('score-b')), '10');
+    await tester.tap(find.byKey(const Key('save-score')));
+    await tester.pumpAndSettle();
+    expect(find.text('Court 1 · 21-10'), findsOneWidget);
+    expect(find.text('Games (2)'), findsOneWidget);
+    await expectSaved('gelanggang.v1', contains('"singles":[1]'));
+
+    // Reopened again: the court is still singles and the game is kept.
+    await launch(tester);
+    await tester.tap(find.textContaining('Dewan Ujian (synthetic)'));
+    await tester.pumpAndSettle();
+    await reveal(tester, find.byKey(const Key('settle-text')));
+    expect(settleText(tester), matches(RegExp(r'- Jun Wei: RM 16\.6[678]')));
+    await tapOn(tester, find.byKey(const Key('open-queue')));
+    expect(find.text('Court 1 · singles'), findsOneWidget);
+    expect(find.text('Court 1 · 21-10'), findsOneWidget);
   });
 
   testWidgets('backup copied on one phone restores on another and survives '

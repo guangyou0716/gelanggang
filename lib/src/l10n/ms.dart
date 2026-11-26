@@ -267,4 +267,24 @@ const msStrings = <K, String>{
   K.errCourtStillOn:
       'Gelanggang {court} masih ada perlawanan; tamatkan perlawanan itu dahulu',
   K.errNotAtSession: 'Semua pemain dalam perlawanan mesti hadir di sesi ini',
+  K.level: 'Tahap',
+  K.levelOf: 'Tahap {level}',
+  K.noLevel: 'Tiada tahap',
+  K.withLevel: '{text} · tahap {level}',
+  K.nameLevel: '{name} · tahap {level}',
+  K.levelBody: 'Mengimbangkan pasukan dalam giliran gelanggang: 1 untuk pemula, 5 paling kuat.',
+  K.levelNone: 'Tiada',
+  K.doubles: 'Beregu',
+  K.singles: 'Perseorangan',
+  K.gameTypeOn: 'Perlawanan di gelanggang {court}',
+  K.courtSingles: 'Gelanggang {court} · perseorangan',
+  K.tickTwo: 'Tandakan sekurang-kurangnya dua pemain di bawah "Siapa yang datang" dahulu.',
+  K.waitingForTwo: 'Menunggu dua pemain yang lapang ({n} lapang sekarang).',
+  K.levelTotals: 'Tahap {a} lwn {b}',
+  K.errTwoPlayers: 'Perlawanan perseorangan memerlukan dua pemain yang berbeza',
+  K.errTeamSizes:
+      'Perlawanan ialah dua lawan dua, atau satu lawan satu untuk perseorangan',
+  K.errBadLevel: 'Tahap untuk {name} mesti dari 1 hingga 5',
+  K.errSinglesCourts:
+      'Perseorangan hanya boleh ditetapkan pada gelanggang sesi ini',
 };
